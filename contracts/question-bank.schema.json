@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["questions", "total"],
+  "additionalProperties": false,
+  "properties": {
+    "total": {"type": "integer", "minimum": 0},
+    "questions": {"type": "array", "items": {"type": "object", "required": ["id", "stem", "origin", "status", "type"], "additionalProperties": false}}
+  }
+}
+

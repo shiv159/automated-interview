@@ -1,0 +1,46 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.5-pg18-trixie
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-interview}
+      POSTGRES_USER: ${POSTGRES_USER:-interview}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-interview-local-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+  backend:
+    build: ./backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-interview}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-interview}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-interview-local-only}
+      APP_ANSWER_EVALUATION_PROFILE: ${APP_ANSWER_EVALUATION_PROFILE:-stub}
+      APP_QUESTION_ENRICHMENT_PROFILE: ${APP_QUESTION_ENRICHMENT_PROFILE:-disabled}
+      APP_EMBEDDING_PROFILE: ${APP_EMBEDDING_PROFILE:-local}
+      VERTEX_PROJECT_ID: ${VERTEX_PROJECT_ID:-}
+      VERTEX_LOCATION: ${VERTEX_LOCATION:-us-central1}
+      VERTEX_ACCESS_TOKEN: ${VERTEX_ACCESS_TOKEN:-}
+      VERTEX_CHAT_MODEL: ${VERTEX_CHAT_MODEL:-gemini-2.5-flash-lite}
+      VERTEX_EMBEDDING_MODEL: ${VERTEX_EMBEDDING_MODEL:-text-embedding-005}
+      VERTEX_EMBEDDING_DIMENSIONS: ${VERTEX_EMBEDDING_DIMENSIONS:-768}
+      AI_DATA_RETENTION_ACKNOWLEDGED: ${AI_DATA_RETENTION_ACKNOWLEDGED:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    ports:
+      - "127.0.0.1:${WEB_PORT:-4200}:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:

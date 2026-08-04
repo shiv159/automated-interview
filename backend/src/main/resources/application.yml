@@ -1,0 +1,21 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: automated-interview
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/interview}
+    username: ${SPRING_DATASOURCE_USERNAME:interview}
+    password: ${SPRING_DATASOURCE_PASSWORD:interview-local-only}
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 5MB
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

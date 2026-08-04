@@ -1,0 +1,9 @@
+.env
+node_modules/
+frontend/dist/
+frontend/.angular/
+backend/target/
+output/
+.playwright-cli/
+.idea/
+*.iml

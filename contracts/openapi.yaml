@@ -1,0 +1,76 @@
+openapi: 3.0.3
+info:
+  title: Automated Interview Platform API
+  version: 1.0.0
+paths:
+  /api/health:
+    get:
+      responses:
+        '200': {description: Healthy}
+  /api/v1/sessions:
+    post:
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [jobDescription, resume, yearsExperience, syntheticDataAttested]
+              properties:
+                jobDescription: {type: string, format: binary}
+                resume: {type: string, format: binary}
+                yearsExperience: {type: integer, minimum: 0, maximum: 30}
+                syntheticDataAttested: {type: boolean}
+      responses: {'201': {description: Created}, '400': {description: Invalid input}, '503': {description: Provider unavailable}}
+  /api/v1/question-bank:
+    get:
+      responses: {'200': {description: Public question metadata}}
+  /api/v1/question-bank/import:
+    post:
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [questionsFile]
+              properties: {questionsFile: {type: string, format: binary}}
+      responses: {'200': {description: Updated}, '201': {description: Created}, '422': {description: Rejected}}
+  /api/v1/sessions/{sessionId}/interview:
+    post:
+      parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Current question}}
+  /api/v1/sessions/{sessionId}:
+    get:
+      parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Session analysis snapshot}, '401': {description: Not owner}, '410': {description: Expired}}
+    delete:
+      parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'204': {description: Deleted}, '401': {description: Not owner}}
+  /api/v1/sessions/{sessionId}/questions/{instanceId}/answers:
+    post:
+      parameters:
+        - {name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: instanceId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AnswerRequest'}}}
+      responses: {'200': {description: Evaluation and next question}}
+  /api/v1/sessions/{sessionId}/report:
+    get:
+      parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses: {'200': {description: Completed report}}
+  /api/v1/question-bank/questions/{id}/status:
+    patch:
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [status], additionalProperties: false, properties: {status: {type: string, enum: [ACTIVE, INACTIVE]}}}}}
+      responses: {'204': {description: Updated}, '409': {description: Seed immutable}}
+components:
+  schemas:
+    AnswerRequest:
+      type: object
+      required: [answer]
+      additionalProperties: false
+      properties: {answer: {type: string, maxLength: 4000}}
