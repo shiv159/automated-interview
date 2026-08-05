@@ -35,7 +35,7 @@ public class VertexAnswerEvaluator {
             bodyNode.set("contents", mapper.createArrayNode().add(mapper.createObjectNode().put("role", "user").set("parts", mapper.createArrayNode().add(mapper.createObjectNode().put("text", prompt)))));
             String body = bodyNode.toString();
             String endpoint = "https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent".formatted(location, projectId, location, model);
-            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(60)).header("Authorization", "Bearer " + token).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(60)).expectContinue(false).header("Authorization", "Bearer " + token).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) throw new ProviderUnavailable();
             String text = mapper.readTree(response.body()).path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("").strip();
             if (text.startsWith("```") && text.endsWith("```")) text = text.substring(text.indexOf('\n') + 1, text.length() - 3).strip();

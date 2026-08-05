@@ -74,6 +74,7 @@ public class VertexSkillAnalyzer {
                 .formatted(location, projectId, location, model);
             HttpRequest request = HttpRequest.newBuilder(URI.create(endpoint))
                 .timeout(Duration.ofSeconds(60))
+                .expectContinue(false)
                 .header("Authorization", "Bearer " + token)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(requestJson))

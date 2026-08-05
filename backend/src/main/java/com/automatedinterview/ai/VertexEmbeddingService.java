@@ -32,7 +32,7 @@ public class VertexEmbeddingService {
             String token = credentials.token();
             String body = mapper.createObjectNode().set("instances", mapper.createArrayNode().add(mapper.createObjectNode().put("content", text))).toString();
             String endpoint = "https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict".formatted(location, projectId, location, model);
-            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(60)).header("Authorization", "Bearer " + token).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(60)).expectContinue(false).header("Authorization", "Bearer " + token).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) throw new ProviderUnavailable();
             JsonNode values = mapper.readTree(response.body()).path("predictions").path(0).path("embeddings").path("values");
             if (!values.isArray() || values.size() != dimensions) throw new ProviderUnavailable();
