@@ -65,7 +65,7 @@ public class VertexSkillAnalyzer {
                 Document:\n%s
                 """.formatted(documentType, skills, document);
             var requestNode = mapper.createObjectNode();
-            requestNode.set("generationConfig", mapper.createObjectNode().put("temperature", 0));
+            requestNode.set("generationConfig", mapper.createObjectNode().put("temperature", 0).put("responseMimeType", "application/json"));
             requestNode.set("contents", mapper.createArrayNode().add(mapper.createObjectNode()
                 .put("role", "user")
                 .set("parts", mapper.createArrayNode().add(mapper.createObjectNode().put("text", prompt)))));

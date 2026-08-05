@@ -10,10 +10,13 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class VertexAnswerEvaluator {
+    private static final Logger log = LoggerFactory.getLogger(VertexAnswerEvaluator.class);
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final String projectId, location, model;
@@ -31,12 +34,15 @@ public class VertexAnswerEvaluator {
             String token = credentials.token();
             String prompt = "Evaluate the candidate answer against the question and ideal answer. Return only JSON: {\"score\": number 0..10, \"strengths\": [1..3 strings], \"improvements\": [1..3 strings]}. Question: " + stem + " Criteria: " + criteria + " Ideal answer: " + idealAnswer + " Candidate answer: " + answer;
             var bodyNode = mapper.createObjectNode();
-            bodyNode.set("generationConfig", mapper.createObjectNode().put("temperature", 0));
+            bodyNode.set("generationConfig", mapper.createObjectNode().put("temperature", 0).put("responseMimeType", "application/json"));
             bodyNode.set("contents", mapper.createArrayNode().add(mapper.createObjectNode().put("role", "user").set("parts", mapper.createArrayNode().add(mapper.createObjectNode().put("text", prompt)))));
             String body = bodyNode.toString();
             String endpoint = "https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent".formatted(location, projectId, location, model);
             HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(60)).expectContinue(false).header("Authorization", "Bearer " + token).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) throw new ProviderUnavailable();
+            if (response.statusCode() / 100 != 2) {
+                log.warn("Vertex answer evaluation returned HTTP {}", response.statusCode());
+                throw new ProviderUnavailable();
+            }
             String text = mapper.readTree(response.body()).path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("").strip();
             if (text.startsWith("```") && text.endsWith("```")) text = text.substring(text.indexOf('\n') + 1, text.length() - 3).strip();
             JsonNode value = mapper.readTree(text); double score = value.path("score").asDouble(-1);
@@ -46,7 +52,10 @@ public class VertexAnswerEvaluator {
             if (strengths.isEmpty() || strengths.size() > 3 || improvements.isEmpty() || improvements.size() > 3) throw new ProviderUnavailable();
             return new Result(Math.round(score * 10) / 10.0, strengths, improvements);
         } catch (ProviderUnavailable exception) { throw exception; }
-        catch (Exception exception) { throw new ProviderUnavailable(); }
+        catch (Exception exception) {
+            log.warn("Vertex answer evaluation response could not be validated: {}", exception.toString());
+            throw new ProviderUnavailable();
+        }
     }
 
     public String model() { return model; }

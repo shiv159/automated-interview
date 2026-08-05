@@ -13,6 +13,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class SessionService {
+    private static final Logger log = LoggerFactory.getLogger(SessionService.class);
     private final DocumentTextExtractor extractor;
     private final VertexSkillAnalyzer analyzer;
     private final JdbcClient jdbc;
@@ -57,7 +60,8 @@ public class SessionService {
                 INSERT INTO interview_session (id, token_hash, state, years_experience, difficulty, profile_match, expires_at)
                 VALUES (:id, :tokenHash, 'READY', :years, :difficulty, :profileMatch, :expiresAt)
                 """).param("id", id).param("tokenHash", hash(token)).param("years", yearsExperience)
-                .param("difficulty", difficulty).param("profileMatch", profileMatch).param("expiresAt", expiresAt).update();
+                .param("difficulty", difficulty).param("profileMatch", profileMatch)
+                .param("expiresAt", java.sql.Timestamp.from(expiresAt)).update();
             saveClaims(id, "JOB", jobClaims, resumeSkills);
             saveClaims(id, "RESUME", resumeClaims, jobSkills);
             return new CreatedSession(new SessionResponse(id, expiresAt, difficulty, profileMatch, jobClaims, resumeClaims, matched, missing), token);
@@ -67,6 +71,7 @@ public class SessionService {
             String code = Set.of("DOCUMENT_LIMIT_EXCEEDED", "UNSUPPORTED_DOCUMENT").contains(exception.getMessage()) ? exception.getMessage() : "INVALID_DOCUMENT";
             throw new SessionInputException(code);
         } catch (Exception exception) {
+            log.error("Session creation failed before a session could be committed", exception);
             throw new SessionInputException("INVALID_DOCUMENT");
         }
     }
