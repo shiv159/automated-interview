@@ -1,16 +1,26 @@
 package com.automatedinterview.ai;
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import org.springframework.core.env.Environment;
 
-@Component
-public class AiConfigurationValidator {
-    public AiConfigurationValidator(
-        @Value("${AI_DATA_RETENTION_ACKNOWLEDGED:false}") boolean retentionAcknowledged,
-        @Value("${APP_ANSWER_EVALUATION_PROFILE:stub}") String evaluationProfile,
-        @Value("${APP_QUESTION_ENRICHMENT_PROFILE:disabled}") String enrichmentProfile,
-        @Value("${APP_EMBEDDING_PROFILE:local}") String embeddingProfile) {
-        if ((!"stub".equals(evaluationProfile) || "ai".equals(enrichmentProfile) || "ai".equals(embeddingProfile)) && !retentionAcknowledged)
+public final class AiConfigurationValidator {
+    private AiConfigurationValidator() {
+    }
+
+    public static void validate(Environment environment) {
+        validate(
+            environment.getProperty("AI_DATA_RETENTION_ACKNOWLEDGED", Boolean.class, false),
+            environment.getProperty("APP_ANSWER_EVALUATION_PROFILE", "stub"),
+            environment.getProperty("APP_QUESTION_ENRICHMENT_PROFILE", "disabled"),
+            environment.getProperty("APP_EMBEDDING_PROFILE", "local"),
+            environment.getProperty("VERTEX_PROJECT_ID", "")
+        );
+    }
+
+    static void validate(boolean retentionAcknowledged, String evaluationProfile, String enrichmentProfile, String embeddingProfile, String projectId) {
+        boolean aiEnabled = "ai".equals(evaluationProfile) || "ai".equals(enrichmentProfile) || "ai".equals(embeddingProfile);
+        if (aiEnabled && !retentionAcknowledged)
             throw new IllegalStateException("AI_DATA_RETENTION_ACKNOWLEDGED must be true when an AI profile is enabled");
+        if (aiEnabled && (projectId == null || projectId.isBlank()))
+            throw new IllegalStateException("VERTEX_PROJECT_ID must be set when APP_ANSWER_EVALUATION_PROFILE, APP_QUESTION_ENRICHMENT_PROFILE, or APP_EMBEDDING_PROFILE enables ai; set VERTEX_PROJECT_ID=intervu-ai-20260704-8f3c and ensure ADC is available");
     }
 }

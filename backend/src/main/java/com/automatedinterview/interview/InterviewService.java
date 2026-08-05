@@ -62,7 +62,7 @@ public class InterviewService {
                 TargetSkill target = targets.get((position - 1 + offset) % targets.size());
                 String queryText = queryText(target, session.difficulty());
                 String queryEmbedding;
-                try { queryEmbedding = embeddingProfile.equals("ai") ? embeddings.embed(queryText) : LocalEmbedding.vector(queryText); }
+                try { queryEmbedding = embeddingProfile.equals("ai") ? embeddings.embedQuery(queryText) : LocalEmbedding.vector(queryText); }
                 catch (VertexEmbeddingService.ProviderUnavailable exception) { throw new InterviewException("EMBEDDING_UNAVAILABLE", 503); }
                 selected = jdbc.sql("""
                     SELECT q.id, q.stem, q.type, q.primary_skill, q.difficulty, q.rubric, q.ideal_answer, q.content_hash

@@ -4,7 +4,7 @@ Greenfield Angular/Spring Boot application for the automated interview MVP.
 
 ## Local foundation
 
-1. Copy `.env.example` to `.env`. Run `gcloud auth application-default login` once; Compose mounts the local ADC file into the backend and refreshes access tokens automatically. Never commit `.env` or Google credential files.
+1. Copy `.env.example` to `.env`. The example file is already wired to `VERTEX_PROJECT_ID=intervu-ai-20260704-8f3c`; keep that value or replace it with your own Vertex project. Run `gcloud auth application-default login` once; Compose mounts the local ADC file into the backend and refreshes access tokens automatically. Never commit `.env` or Google credential files.
 2. Start PostgreSQL/pgvector and the backend:
 
 ```powershell
@@ -34,8 +34,12 @@ provider-free development, set `APP_ANSWER_EVALUATION_PROFILE` and
 its structured enrichment is provider-required). Provider failures fail closed with
 stable API problem codes and never create partial sessions or evaluations.
 
+If `VERTEX_PROJECT_ID` is missing while an `ai` profile is enabled, backend
+startup now fails fast with a targeted validation error before Spring AI can
+emit a lower-level autoconfiguration exception.
+
 Spring AI is enabled for the migrated Google GenAI/Vertex adapters with
-`APP_SPRING_AI_ENABLED=true`. Use it with the three `ai` profiles and
+`SPRING_AI_MODEL_CHAT=google-genai` and `SPRING_AI_MODEL_EMBEDDING_TEXT=google-genai` are enabled by default. Use the three `ai` profiles and
 `AI_DATA_RETENTION_ACKNOWLEDGED=true` for live validation.
 For a provider-outage drill with no ADC mounted, set
 `APP_SPRING_AI_CREDENTIALS_AVAILABLE=false`; the application will boot and

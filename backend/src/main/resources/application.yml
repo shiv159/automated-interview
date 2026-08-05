@@ -15,11 +15,37 @@ spring:
     enabled: true
     locations: classpath:db/migration
   ai:
+    model:
+      chat: ${SPRING_AI_MODEL_CHAT:google-genai}
+      embedding:
+        text: ${SPRING_AI_MODEL_EMBEDDING_TEXT:google-genai}
+    google:
+      genai:
+        project-id: ${VERTEX_PROJECT_ID:}
+        location: ${VERTEX_LOCATION:us-central1}
+        chat:
+          model: ${VERTEX_CHAT_MODEL:gemini-2.5-flash-lite}
+          temperature: 0.0
+          response-mime-type: application/json
+        embedding:
+          text:
+            model: ${VERTEX_EMBEDDING_MODEL:text-embedding-005}
+            dimensions: ${VERTEX_EMBEDDING_DIMENSIONS:768}
+            task-type: RETRIEVAL_DOCUMENT
     chat:
+      client:
+        enabled: ${SPRING_AI_CHAT_CLIENT_ENABLED:true}
       observations:
         include-error-logging: true
         log-prompt: false
         log-completion: false
+app:
+  ai:
+    enabled: ${APP_SPRING_AI_ENABLED:true}
+    max-attempts: ${APP_AI_MAX_ATTEMPTS:2}
+    retry-backoff-ms: ${APP_AI_RETRY_BACKOFF_MS:100}
+    embedding-dimensions: ${VERTEX_EMBEDDING_DIMENSIONS:768}
+    embedding-batch-size: ${APP_AI_EMBEDDING_BATCH_SIZE:32}
 logging:
   pattern:
     level: "%5p [corr=%X{correlationId:-none}]"
