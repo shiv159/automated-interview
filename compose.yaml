@@ -27,10 +27,13 @@ services:
       VERTEX_PROJECT_ID: ${VERTEX_PROJECT_ID:-}
       VERTEX_LOCATION: ${VERTEX_LOCATION:-us-central1}
       VERTEX_ACCESS_TOKEN: ${VERTEX_ACCESS_TOKEN:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
       VERTEX_CHAT_MODEL: ${VERTEX_CHAT_MODEL:-gemini-2.5-flash-lite}
       VERTEX_EMBEDDING_MODEL: ${VERTEX_EMBEDDING_MODEL:-text-embedding-005}
       VERTEX_EMBEDDING_DIMENSIONS: ${VERTEX_EMBEDDING_DIMENSIONS:-768}
       AI_DATA_RETENTION_ACKNOWLEDGED: ${AI_DATA_RETENTION_ACKNOWLEDGED:-false}
+    volumes:
+      - ${APPDATA}/gcloud:/root/.config/gcloud:ro
     depends_on:
       db:
         condition: service_healthy

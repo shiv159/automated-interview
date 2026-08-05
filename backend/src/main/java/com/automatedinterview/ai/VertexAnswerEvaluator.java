@@ -16,16 +16,19 @@ import org.springframework.stereotype.Service;
 public class VertexAnswerEvaluator {
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private final String projectId, location, token, model;
+    private final String projectId, location, model;
+    private final VertexAccessTokenProvider credentials;
 
     public VertexAnswerEvaluator(@Value("${VERTEX_PROJECT_ID:}") String projectId, @Value("${VERTEX_LOCATION:us-central1}") String location,
-        @Value("${VERTEX_ACCESS_TOKEN:}") String token, @Value("${VERTEX_CHAT_MODEL:gemini-2.5-flash-lite}") String model) {
-        this.projectId = projectId; this.location = location; this.token = VertexCredentials.token(token); this.model = model;
+        @Value("${VERTEX_CHAT_MODEL:gemini-2.5-flash-lite}") String model,
+        VertexAccessTokenProvider credentials) {
+        this.projectId = projectId; this.location = location; this.model = model; this.credentials = credentials;
     }
 
     public Result evaluate(String stem, String criteria, String idealAnswer, String answer) {
-        if (projectId.isBlank() || token.isBlank()) throw new ProviderUnavailable();
+        if (projectId.isBlank() || !credentials.isAvailable()) throw new ProviderUnavailable();
         try {
+            String token = credentials.token();
             String prompt = "Evaluate the candidate answer against the question and ideal answer. Return only JSON: {\"score\": number 0..10, \"strengths\": [1..3 strings], \"improvements\": [1..3 strings]}. Question: " + stem + " Criteria: " + criteria + " Ideal answer: " + idealAnswer + " Candidate answer: " + answer;
             var bodyNode = mapper.createObjectNode();
             bodyNode.set("generationConfig", mapper.createObjectNode().put("temperature", 0));

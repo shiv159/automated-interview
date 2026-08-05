@@ -16,18 +16,20 @@ import org.springframework.stereotype.Service;
 public class VertexEmbeddingService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private final String projectId, location, token, model;
+    private final String projectId, location, model;
+    private final VertexAccessTokenProvider credentials;
     private final int dimensions;
 
     public VertexEmbeddingService(@Value("${VERTEX_PROJECT_ID:}") String projectId, @Value("${VERTEX_LOCATION:us-central1}") String location,
-        @Value("${VERTEX_ACCESS_TOKEN:}") String token, @Value("${VERTEX_EMBEDDING_MODEL:text-embedding-005}") String model,
-        @Value("${VERTEX_EMBEDDING_DIMENSIONS:768}") int dimensions) {
-        this.projectId = projectId; this.location = location; this.token = VertexCredentials.token(token); this.model = model; this.dimensions = dimensions;
+        @Value("${VERTEX_EMBEDDING_MODEL:text-embedding-005}") String model,
+        @Value("${VERTEX_EMBEDDING_DIMENSIONS:768}") int dimensions, VertexAccessTokenProvider credentials) {
+        this.projectId = projectId; this.location = location; this.model = model; this.dimensions = dimensions; this.credentials = credentials;
     }
 
     public String embed(String text) {
-        if (projectId.isBlank() || token.isBlank()) throw new ProviderUnavailable();
+        if (projectId.isBlank() || !credentials.isAvailable()) throw new ProviderUnavailable();
         try {
+            String token = credentials.token();
             String body = mapper.createObjectNode().set("instances", mapper.createArrayNode().add(mapper.createObjectNode().put("content", text))).toString();
             String endpoint = "https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict".formatted(location, projectId, location, model);
             HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(60)).header("Authorization", "Bearer " + token).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());

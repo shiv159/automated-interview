@@ -4,7 +4,7 @@ Greenfield Angular/Spring Boot application for the automated interview MVP.
 
 ## Local foundation
 
-1. Copy `.env.example` to `.env` and fill Vertex credentials locally. Never commit `.env`.
+1. Copy `.env.example` to `.env`. Run `gcloud auth application-default login` once; Compose mounts the local ADC file into the backend and refreshes access tokens automatically. Never commit `.env` or Google credential files.
 2. Start PostgreSQL/pgvector and the backend:
 
 ```powershell
@@ -33,6 +33,18 @@ provider-free development, set `APP_ANSWER_EVALUATION_PROFILE` and
 `APP_EMBEDDING_PROFILE` to `local` (question import remains AI-backed because
 its structured enrichment is provider-required). Provider failures fail closed with
 stable API problem codes and never create partial sessions or evaluations.
+
+For local Vertex setup:
+
+```powershell
+gcloud auth application-default login
+gcloud auth application-default set-quota-project intervu-ai-20260704-8f3c
+gcloud services enable aiplatform.googleapis.com --project intervu-ai-20260704-8f3c
+```
+
+`VERTEX_ACCESS_TOKEN` is retained only as a fallback for deployments that provide
+their own short-lived token. The backend prefers Application Default Credentials,
+which avoids expired tokens in `.env`.
 
 Verification commands:
 

@@ -23,22 +23,22 @@ public class VertexSkillAnalyzer {
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private final String projectId;
     private final String location;
-    private final String token;
     private final String model;
+    private final com.automatedinterview.ai.VertexAccessTokenProvider credentials;
 
     public VertexSkillAnalyzer(
         @Value("${VERTEX_PROJECT_ID:}") String projectId,
         @Value("${VERTEX_LOCATION:us-central1}") String location,
-        @Value("${VERTEX_ACCESS_TOKEN:}") String token,
-        @Value("${VERTEX_CHAT_MODEL:gemini-2.5-flash-lite}") String model) {
+        @Value("${VERTEX_CHAT_MODEL:gemini-2.5-flash-lite}") String model,
+        com.automatedinterview.ai.VertexAccessTokenProvider credentials) {
         this.projectId = projectId;
         this.location = location;
-        this.token = com.automatedinterview.ai.VertexCredentials.token(token);
         this.model = model;
+        this.credentials = credentials;
     }
 
     public List<SkillClaim> analyze(String documentType, String document) {
-        if (projectId.isBlank() || token.isBlank()) throw new SkillProviderException(true);
+        if (projectId.isBlank() || !credentials.isAvailable()) throw new SkillProviderException(true);
         if (document == null || document.isBlank()) return List.of();
         Map<String, SkillClaim> aggregated = new LinkedHashMap<>();
         for (String chunk : chunks(document)) {
@@ -53,6 +53,7 @@ public class VertexSkillAnalyzer {
 
     private List<SkillClaim> analyzeChunk(String documentType, String document) {
         try {
+            String token = credentials.token();
             String skills = SkillCatalog.SKILLS.stream()
                 .map(skill -> skill.id() + "=" + String.join(", ", skill.aliases()))
                 .reduce((left, right) -> left + "; " + right).orElse("");
