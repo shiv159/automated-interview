@@ -1,43 +1,32 @@
 package com.automatedinterview.ai;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class VertexEmbeddingService {
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-    private final String projectId, location, model;
-    private final VertexAccessTokenProvider credentials;
+    private final EmbeddingModel model;
     private final int dimensions;
 
-    public VertexEmbeddingService(@Value("${VERTEX_PROJECT_ID:}") String projectId, @Value("${VERTEX_LOCATION:us-central1}") String location,
-        @Value("${VERTEX_EMBEDDING_MODEL:text-embedding-005}") String model,
-        @Value("${VERTEX_EMBEDDING_DIMENSIONS:768}") int dimensions, VertexAccessTokenProvider credentials) {
-        this.projectId = projectId; this.location = location; this.model = model; this.dimensions = dimensions; this.credentials = credentials;
+    public VertexEmbeddingService(@Value("${VERTEX_EMBEDDING_DIMENSIONS:768}") int dimensions,
+                                  ObjectProvider<EmbeddingModel> model) {
+        this.model = model.getIfAvailable();
+        this.dimensions = dimensions;
     }
 
     public String embed(String text) {
-        if (projectId.isBlank() || !credentials.isAvailable()) throw new ProviderUnavailable();
+        if (model == null) throw new ProviderUnavailable();
         try {
-            String token = credentials.token();
-            String body = mapper.createObjectNode().set("instances", mapper.createArrayNode().add(mapper.createObjectNode().put("content", text))).toString();
-            String endpoint = "https://%s-aiplatform.googleapis.com/v1/projects/%s/locations/%s/publishers/google/models/%s:predict".formatted(location, projectId, location, model);
-            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(endpoint)).timeout(Duration.ofSeconds(60)).expectContinue(false).header("Authorization", "Bearer " + token).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() / 100 != 2) throw new ProviderUnavailable();
-            JsonNode values = mapper.readTree(response.body()).path("predictions").path(0).path("embeddings").path("values");
-            if (!values.isArray() || values.size() != dimensions) throw new ProviderUnavailable();
-            List<String> output = new ArrayList<>(); values.forEach(item -> output.add(item.asText()));
-            return "[" + String.join(",", output) + "]";
+            float[] values = model.embed(text);
+            if (values.length != dimensions) throw new ProviderUnavailable();
+            StringBuilder result = new StringBuilder("[");
+            for (int i = 0; i < values.length; i++) {
+                if (i > 0) result.append(',');
+                result.append(values[i]);
+            }
+            return result.append(']').toString();
         } catch (ProviderUnavailable exception) { throw exception; }
         catch (Exception exception) { throw new ProviderUnavailable(); }
     }

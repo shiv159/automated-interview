@@ -14,6 +14,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  ai:
+    chat:
+      observations:
+        include-error-logging: true
+        log-prompt: false
+        log-completion: false
 logging:
   pattern:
     level: "%5p [corr=%X{correlationId:-none}]"
@@ -21,4 +27,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health
+        include: health,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}

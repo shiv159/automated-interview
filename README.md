@@ -34,6 +34,13 @@ provider-free development, set `APP_ANSWER_EVALUATION_PROFILE` and
 its structured enrichment is provider-required). Provider failures fail closed with
 stable API problem codes and never create partial sessions or evaluations.
 
+Spring AI is enabled for the migrated Google GenAI/Vertex adapters with
+`APP_SPRING_AI_ENABLED=true`. Use it with the three `ai` profiles and
+`AI_DATA_RETENTION_ACKNOWLEDGED=true` for live validation.
+For a provider-outage drill with no ADC mounted, set
+`APP_SPRING_AI_CREDENTIALS_AVAILABLE=false`; the application will boot and
+return its stable provider-unavailable API problem instead of failing startup.
+
 For local Vertex setup:
 
 ```powershell
@@ -42,9 +49,8 @@ gcloud auth application-default set-quota-project intervu-ai-20260704-8f3c
 gcloud services enable aiplatform.googleapis.com --project intervu-ai-20260704-8f3c
 ```
 
-`VERTEX_ACCESS_TOKEN` is retained only as a fallback for deployments that provide
-their own short-lived token. The backend prefers Application Default Credentials,
-which avoids expired tokens in `.env`.
+Spring AI uses Application Default Credentials for Vertex mode, avoiding
+short-lived token configuration in `.env`.
 
 Verification commands:
 
