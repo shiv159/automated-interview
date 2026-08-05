@@ -55,7 +55,7 @@ public class QuestionImportService {
             if (!exists && bankSize + created >= 1000) throw new ImportException("QUESTION_BANK_LIMIT_REACHED", 409);
             UUID id = exists ? jdbc.sql("SELECT id FROM question WHERE content_hash = :hash").param("hash", hash).query(UUID.class).single() : UUID.randomUUID();
             String tags = "[" + enrichment.tags().stream().map(tag -> "\"" + tag.replace("\"", "\\\"") + "\"").reduce((a,b) -> a + "," + b).orElse("") + "]";
-            String rubric = classification.type().equals("BEHAVIORAL") ? "[\"situation\",\"action\",\"result\",\"reflection\"]" : "[\"accuracy\",\"tradeoffs\",\"clarity\"]";
+            String rubric = classification.type().equals("BEHAVIORAL") ? "[\"SITUATION\",\"ACTION\",\"RESULT\",\"REFLECTION\"]" : "[\"CORRECTNESS\",\"DEPTH\",\"CLARITY\"]";
             String ideal = enrichment.idealAnswer();
             String embedding;
             try { embedding = embeddingProfile.equals("ai") ? embeddings.embed(stem) : LocalEmbedding.vector(stem); }

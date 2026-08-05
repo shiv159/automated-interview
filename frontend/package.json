@@ -5,7 +5,9 @@
   "scripts": {
     "start": "ng serve",
     "build": "ng build",
-    "test": "ng test"
+    "test": "node --test scripts/test.mjs",
+    "e2e": "node scripts/e2e-smoke.mjs",
+    "e2e:smoke": "node scripts/e2e-smoke.mjs"
   },
   "dependencies": {
     "@angular/animations": "22.0.8",
@@ -25,4 +27,3 @@
     "typescript": "6.0.3"
   }
 }
-

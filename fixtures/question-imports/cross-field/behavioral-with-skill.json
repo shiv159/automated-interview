@@ -1,0 +1,7 @@
+{
+  "type": "BEHAVIORAL",
+  "primarySkill": "CORE_JAVA",
+  "difficulty": null,
+  "tags": ["reflection"],
+  "idealAnswer": "This response violates the behavioral cross-field rule because behavioral items cannot name a primary canonical skill."
+}

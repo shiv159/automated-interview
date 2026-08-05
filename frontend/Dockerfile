@@ -1,4 +1,4 @@
-FROM node:24.16.0 AS build
+FROM node:24.18.0 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -10,4 +10,3 @@ FROM nginx:1.29-alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/automated-interview/browser /usr/share/nginx/html
 EXPOSE 80
-

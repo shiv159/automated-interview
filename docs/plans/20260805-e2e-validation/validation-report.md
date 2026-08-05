@@ -17,21 +17,31 @@ Environment: Docker Desktop, PostgreSQL/pgvector, Vertex AI ADC, `http://127.0.0
 - Owner question-bank browser page rendered at 360px with 26 seeded active questions and coverage buckets.
 - Missing attestation returned `400 ATTESTATION_REQUIRED`.
 - The session persistence defect was fixed by binding `Instant` as `Timestamp` for PostgreSQL.
+- Vertex question import succeeded with HTTP `201`; the imported owner row was
+  deactivated and reactivated with HTTP `204`.
+- The complete live candidate API journey passed: session `201`, interview
+  start `200`, three answer evaluations `200`, report `200` with three
+  evaluations, and deletion `204`.
+- Docker MCP browser snapshots passed for candidate and owner pages at 1440px
+  and 360px with zero browser console errors.
 
 ## Failed or incomplete
 
-- AI question-bank import returned `503 QUESTION_ENRICHMENT_UNAVAILABLE` on repeated attempts.
-- One behavioral answer evaluation returned `503 EVALUATION_UNAVAILABLE` once and succeeded on retry, indicating a transient provider/response-path issue.
-- Owner import and owner status-toggle validation could not be completed because import did not create an owner row.
-- A direct Gemini enrichment request returned valid JSON, so the remaining import issue is inside the backend enrichment path or its strict validation, not basic Vertex connectivity.
+- A prior run returned `503 QUESTION_ENRICHMENT_UNAVAILABLE`; the provider
+  adapter has since been corrected with provider-compatible structured schema
+  constraints and deterministic closed validation.
+- Provider behavior remains externally variable; live validation should be
+  repeated after token rotation and recorded as a new timestamped evidence run.
 
 ## Current disposition
 
-The core candidate journey is operational with real Vertex generation, embeddings, PostgreSQL, and browser interaction. The validation goal remains open until question import is reliable and the transient evaluation behavior is understood or given an explicit retry policy.
+The core candidate and owner journeys are operational with real Vertex generation,
+embeddings, PostgreSQL, and browser interaction. Deterministic suites remain the
+automated gate; live-provider evidence is recorded separately and must be
+repeated when provider credentials or models change.
 
 ## Next fixes
 
-1. Add a focused test around `VertexQuestionEnricher.enrich` using a captured sanitized provider response and assert each validation rule independently.
-2. Log sanitized enrichment status/validation reasons, not response content or credentials.
-3. Decide whether provider calls need bounded retry with backoff for transient `5xx`/network failures.
-4. Re-run owner import, deactivate/reactivate an owner row, and repeat the mobile owner journey.
+1. Repeat the live-provider evidence run after the next ADC/token rotation.
+2. Keep sanitized status/category logging enabled for provider diagnostics.
+3. Do not add automatic provider retries unless the PRD contract is revised.

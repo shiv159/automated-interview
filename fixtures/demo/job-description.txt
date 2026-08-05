@@ -1,0 +1,2 @@
+Backend engineer building services with Core Java, Spring Boot, SQL relational databases, and Angular.
+Core Java and Spring Boot are required. SQL relational databases are preferred.

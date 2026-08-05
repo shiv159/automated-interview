@@ -31,7 +31,7 @@ public class QuestionSeedLoader implements CommandLineRunner {
             for (String difficulty : difficulties) {
                 for (int index = 1; index <= 2; index++) {
                     String stem = "Explain a " + difficulty.toLowerCase() + " " + skill.displayName() + " design problem and how you would solve it (seed " + index + ").";
-                    upsert(UUID.nameUUIDFromBytes((skill.id() + difficulty + index).getBytes(StandardCharsets.UTF_8)), stem, skill.id(), difficulty, "[\"accuracy\",\"tradeoffs\",\"clarity\"]", "SEED");
+                    upsert(UUID.nameUUIDFromBytes((skill.id() + difficulty + index).getBytes(StandardCharsets.UTF_8)), stem, skill.id(), difficulty, "[\"CORRECTNESS\",\"DEPTH\",\"CLARITY\"]", "SEED");
                 }
             }
         }

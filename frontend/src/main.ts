@@ -1,11 +1,12 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { Component, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, DatePipe],
   template: `
     @if (isBank) {
       <main class="shell">
@@ -29,7 +30,8 @@ import { FormsModule } from '@angular/forms';
             @for (question of rows.questions; track question.id) {
               <article class="bank-row">
                 <strong>{{ question.stem }}</strong>
-                <small>{{ question.origin }} · {{ question.type }} · {{ question.primarySkill || 'Behavioral' }} · {{ question.status }}</small>
+                <small>{{ question.origin }} · {{ question.type }} · {{ question.primarySkill || 'Behavioral' }} · {{ question.difficulty || 'All levels' }} · {{ question.status }}</small>
+                <small>Tags: {{ formatTags(question.tags) }} · Updated: {{ question.updatedAt | date:'medium' }}</small>
                 @if (question.origin === 'OWNER_IMPORT') {
                   <button type="button" (click)="toggleStatus(question)" [disabled]="busy()">{{ question.status === 'ACTIVE' ? 'Deactivate' : 'Activate' }}</button>
                 }
@@ -59,6 +61,11 @@ import { FormsModule } from '@angular/forms';
           <p>Profile match: {{ session.profileMatch }}% · Difficulty: {{ session.difficulty }}</p>
           <p>Matched: {{ session.matchedSkills.join(', ') || 'None' }}</p>
           <p>Missing: {{ session.missingSkills.join(', ') || 'None' }}</p>
+          <div class="evidence" aria-label="Skill evidence">
+            @for (claim of session.jobSkills; track claim.skillId) {
+              <p><strong>{{ claim.skillId }}</strong> · {{ claim.importance }}: “{{ claim.evidence }}”</p>
+            }
+          </div>
           <button type="button" (click)="startInterview()" [disabled]="busy()">Start interview</button>
         </section>
       }
@@ -76,8 +83,13 @@ import { FormsModule } from '@angular/forms';
           <h2 id="report-title">{{ finalReport.readinessLabel }}</h2>
           <p>Readiness: {{ finalReport.readinessScore }} · Interview: {{ finalReport.interviewScore }}</p>
           @for (evaluation of finalReport.evaluations; track evaluation.position) {
-            <article><strong>Question {{ evaluation.position }} · {{ evaluation.score }}/10</strong><p>{{ evaluation.improvements }}</p></article>
+            <article>
+              <strong>Question {{ evaluation.position }} · {{ evaluation.score }}/10</strong>
+              <p>Strengths: {{ formatTags(evaluation.strengths) }}</p>
+              <p>Improvements: {{ formatTags(evaluation.improvements) }}</p>
+            </article>
           }
+          <p class="disclaimer">This coaching report is practice feedback, not a hiring or employment decision.</p>
           <div class="actions">
             <button type="button" (click)="downloadReport()">Download JSON</button>
             <button type="button" (click)="printReport()">Print / save PDF</button>
@@ -103,6 +115,15 @@ class AppComponent {
   answerText = '';
   ownerFile: File | null = null;
   readonly bank = signal<any>(null);
+
+  formatTags(value: unknown): string {
+    if (Array.isArray(value)) return value.join(', ');
+    if (typeof value !== 'string') return '';
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.join(', ') : value;
+    } catch { return value; }
+  }
 
   constructor() {
     if (this.isBank) void this.loadBank();

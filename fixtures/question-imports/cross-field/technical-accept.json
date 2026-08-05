@@ -1,0 +1,7 @@
+{
+  "type": "TECHNICAL",
+  "primarySkill": "CORE_JAVA",
+  "difficulty": "MEDIUM",
+  "tags": ["collections", "performance"],
+  "idealAnswer": "A strong answer explains the collection choice, expected access patterns, complexity tradeoffs, memory behavior, and how tests would verify the decision."
+}

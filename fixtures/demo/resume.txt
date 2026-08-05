@@ -1,0 +1,2 @@
+Java backend developer with Core Java and Spring Boot experience.
+Built REST services and maintained relational database queries.

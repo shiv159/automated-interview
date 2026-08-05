@@ -1,0 +1,11 @@
+{
+  "catalogVersion": "2026-08-04.v1",
+  "seedPolicy": {
+    "technicalQuestionsPerSkillDifficulty": 2,
+    "behavioralQuestionsMinimum": 1,
+    "immutable": true,
+    "loadedBy": "application-seed-loader"
+  },
+  "skills": ["CORE_JAVA", "SPRING_BOOT", "SQL_RELATIONAL", "ANGULAR"],
+  "difficulties": ["EASY", "MEDIUM", "HARD"]
+}
