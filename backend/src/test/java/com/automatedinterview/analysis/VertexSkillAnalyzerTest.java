@@ -82,6 +82,14 @@ class VertexSkillAnalyzerTest {
     }
 
     @Test
+    void validatedClaimsAllowsPdfWhitespaceDifferencesWithinOneLine() {
+        List<SkillClaim> claims = validatedClaims("""
+            {"skills":[{"skillId":"SPRING_BOOT","importance":"REQUIRED","evidence":"Spring   Boot"}]}
+            """, "Spring Boot is used for APIs");
+        assertEquals("SPRING_BOOT", claims.get(0).skillId());
+    }
+
+    @Test
     void clipEvidenceCentersLongMatchesWithinTheLineBound() {
         String line = "a".repeat(220) + "quoted evidence" + "b".repeat(220);
 

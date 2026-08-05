@@ -87,7 +87,7 @@ public class VertexSkillAnalyzer {
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() / 100 != 2) {
                 log.warn("Vertex skill analysis failed: status={}", response.statusCode());
-                throw new SkillProviderException(true);
+                throw new SkillProviderException(true, "provider_http_status");
             }
             JsonNode root = mapper.readTree(response.body());
             String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asText("");
@@ -96,15 +96,17 @@ public class VertexSkillAnalyzer {
         } catch (SkillProviderException exception) {
             throw exception;
         } catch (Exception exception) {
-            log.warn("Vertex skill analysis response validation failed: category={}", exception.getClass().getSimpleName());
-            throw new SkillProviderException(true);
+            String category = exception instanceof IllegalArgumentException && exception.getMessage() != null
+                ? exception.getMessage() : "invalid_provider_response";
+            log.warn("Vertex skill analysis response validation failed: category={}", category);
+            throw new SkillProviderException(true, category);
         }
     }
 
     static List<SkillClaim> validatedClaims(JsonNode output, String document) {
         if (output == null || !output.isObject() || !output.path("skills").isArray()) throw new IllegalArgumentException("invalid_skills");
         String status = output.path("status").asText("ACCEPT");
-        if ("UNCERTAIN".equals(status)) throw new SkillProviderException(false);
+        if ("UNCERTAIN".equals(status)) throw new SkillProviderException(false, "provider_uncertain");
         if (!"ACCEPT".equals(status)) throw new IllegalArgumentException("invalid_status");
         Set<String> seen = new HashSet<>();
         List<SkillClaim> claims = new ArrayList<>();
@@ -112,20 +114,34 @@ public class VertexSkillAnalyzer {
             String skillId = item.path("skillId").asText("");
             String importance = item.path("importance").asText("");
             String evidence = item.path("evidence").asText("");
-            if (!isKnownSkillStatic(skillId) || !Set.of("REQUIRED", "PREFERRED").contains(importance)
-                || evidence.isBlank() || evidence.codePointCount(0, evidence.length()) < 3 || !seen.add(skillId))
-                throw new IllegalArgumentException("invalid_skill_claim");
+            if (!isKnownSkillStatic(skillId)) throw new IllegalArgumentException("invalid_skill_id");
+            if (!Set.of("REQUIRED", "PREFERRED").contains(importance)) throw new IllegalArgumentException("invalid_importance");
+            if (evidence.isBlank() || evidence.codePointCount(0, evidence.length()) < 3) throw new IllegalArgumentException("missing_evidence");
+            if (!seen.add(skillId)) throw new IllegalArgumentException("duplicate_skill");
             String normalizedDocument = typographicNormalize(document);
             String normalizedEvidence = typographicNormalize(Normalizer.normalize(evidence, Normalizer.Form.NFC));
-            int start = normalizedDocument.indexOf(normalizedEvidence);
-            if (start < 0 || normalizedEvidence.indexOf('\n') >= 0 || normalizedEvidence.indexOf('\r') >= 0) throw new IllegalArgumentException("evidence_not_found");
-            int end = start + normalizedEvidence.length();
-            if (normalizedDocument.substring(0, start).lastIndexOf('\n') >= 0 && normalizedDocument.substring(start, end).contains("\n"))
+            if (normalizedEvidence.indexOf('\n') >= 0 || normalizedEvidence.indexOf('\r') >= 0)
                 throw new IllegalArgumentException("evidence_crosses_line");
-            if (normalizedDocument.substring(start, end).contains("\n")) throw new IllegalArgumentException("evidence_crosses_line");
-            claims.add(new SkillClaim(skillId, importance, document.substring(start, end), false));
+            if (!matchesWithinLine(normalizedDocument, normalizedEvidence))
+                throw new IllegalArgumentException("evidence_not_found");
+            int exactStart = normalizedDocument.indexOf(normalizedEvidence);
+            String storedEvidence = exactStart >= 0
+                ? document.substring(exactStart, exactStart + normalizedEvidence.length()) : evidence;
+            claims.add(new SkillClaim(skillId, importance, storedEvidence, false));
         }
         return claims;
+    }
+
+    private static boolean matchesWithinLine(String document, String evidence) {
+        String compactEvidence = evidence.replaceAll("[^\\p{L}\\p{N}]", "").toLowerCase(java.util.Locale.ROOT);
+        for (String line : document.split("\\n", -1)) {
+            String normalizedLine = line.replaceAll("\\s+", " ").strip();
+            String normalizedEvidence = evidence.replaceAll("\\s+", " ").strip();
+            if (normalizedLine.contains(normalizedEvidence)) return true;
+            String compactLine = normalizedLine.replaceAll("[^\\p{L}\\p{N}]", "").toLowerCase(java.util.Locale.ROOT);
+            if (compactEvidence.length() >= 3 && compactLine.contains(compactEvidence)) return true;
+        }
+        return false;
     }
 
     private ObjectNode responseSchema() {
@@ -227,11 +243,18 @@ public class VertexSkillAnalyzer {
 
     public static class SkillProviderException extends RuntimeException {
         private final boolean providerFailure;
+        private final String category;
 
         public SkillProviderException(boolean providerFailure) {
+            this(providerFailure, "unknown");
+        }
+
+        public SkillProviderException(boolean providerFailure, String category) {
             this.providerFailure = providerFailure;
+            this.category = category;
         }
 
         public boolean providerFailure() { return providerFailure; }
+        public String category() { return category; }
     }
 }

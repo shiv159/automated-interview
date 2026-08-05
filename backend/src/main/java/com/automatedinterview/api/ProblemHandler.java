@@ -13,9 +13,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 @RestControllerAdvice
 public class ProblemHandler {
+    private static final Logger log = LoggerFactory.getLogger(ProblemHandler.class);
     @ExceptionHandler(SessionService.SessionInputException.class)
     ResponseEntity<Problem> input(SessionService.SessionInputException exception, HttpServletRequest request) {
         int status = exception.code().equals("INVALID_SESSION_TOKEN") ? 401 : exception.code().equals("SESSION_EXPIRED") ? 410 : exception.code().equals("SESSION_NOT_FOUND") ? 404 : exception.code().equals("DOCUMENT_LIMIT_EXCEEDED") ? 413 : exception.code().equals("UNSUPPORTED_DOCUMENT") ? 415 : exception.code().equals("ATTESTATION_REQUIRED") || exception.code().equals("INVALID_EXPERIENCE")
@@ -25,6 +29,8 @@ public class ProblemHandler {
 
     @ExceptionHandler(VertexSkillAnalyzer.SkillProviderException.class)
     ResponseEntity<Problem> provider(VertexSkillAnalyzer.SkillProviderException exception, HttpServletRequest request) {
+        log.warn("skill_analysis_error category={} providerFailure={} correlationId={}",
+            exception.category(), exception.providerFailure(), MDC.get(ApiRequestLoggingFilter.CORRELATION_MDC_KEY));
         int status = exception.providerFailure() ? 503 : 422;
         String code = exception.providerFailure() ? "SKILL_ANALYSIS_UNAVAILABLE" : "SKILL_ANALYSIS_UNCERTAIN";
         return response(code, status, request);
@@ -46,8 +52,13 @@ public class ProblemHandler {
     }
 
     private ResponseEntity<Problem> response(String code, int status, HttpServletRequest request) {
+        log.warn("api_error method={} path={} status={} code={} correlationId={}",
+            request.getMethod(), request.getRequestURI(), status, code,
+            MDC.get(ApiRequestLoggingFilter.CORRELATION_MDC_KEY));
+        String correlationId = MDC.get(ApiRequestLoggingFilter.CORRELATION_MDC_KEY);
+        if (correlationId == null || correlationId.isBlank()) correlationId = UUID.randomUUID().toString();
         Problem problem = new Problem("urn:automated-interview:problem:" + code, code, status, code,
-            request.getRequestURI(), code, UUID.randomUUID().toString());
+            request.getRequestURI(), code, correlationId);
         return ResponseEntity.status(status).contentType(MediaType.APPLICATION_PROBLEM_JSON).body(problem);
     }
 
