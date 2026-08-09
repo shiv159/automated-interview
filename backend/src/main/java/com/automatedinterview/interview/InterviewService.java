@@ -8,9 +8,7 @@ import com.automatedinterview.document.DocumentNormalizer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -30,7 +28,7 @@ public class InterviewService {
     private final String embeddingProfile;
 
     public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator, VertexEmbeddingService embeddings,
-        @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:stub}") String evaluationProfile,
+        @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile,
         @org.springframework.beans.factory.annotation.Value("${APP_EMBEDDING_PROFILE:local}") String embeddingProfile) {
         this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.embeddings = embeddings;
         this.evaluationProfile = evaluationProfile; this.embeddingProfile = embeddingProfile;
@@ -132,11 +130,7 @@ public class InterviewService {
                 jdbc.sql("UPDATE session_question SET status = 'ACTIVE' WHERE id = :id").param("id", question.id()).update();
                 throw new InterviewException("EVALUATION_UNAVAILABLE", 503);
             }
-        } else {
-            evaluation = evaluate(normalized, question.idealAnswer());
-            adapter = "stub";
-            model = "deterministic-local";
-        }
+        } else throw new IllegalStateException("APP_ANSWER_EVALUATION_PROFILE must be ai");
         jdbc.sql("""
             INSERT INTO evaluation (id, session_question_id, criteria_scores, strengths, improvements, score, adapter, model)
             VALUES (:id, :questionId, CAST(:criteria AS jsonb), CAST(:strengths AS jsonb), CAST(:improvements AS jsonb), :score, :adapter, :model)
@@ -213,26 +207,6 @@ public class InterviewService {
         return normalized;
     }
 
-    private Evaluation evaluate(String answer, String ideal) {
-        Set<String> expected = words(ideal);
-        Set<String> actual = words(answer);
-        Set<String> covered = new HashSet<>(expected); covered.retainAll(actual);
-        double coverage = expected.isEmpty() ? 0 : covered.size() / (double) expected.size();
-        double score = Math.min(10, 10 * coverage / .60);
-        List<String> strengths = new ArrayList<>();
-        if (coverage >= .60) strengths.add("Strong ideal-answer coverage");
-        strengths.addAll(expected.stream().filter(covered::contains).limit(strengths.isEmpty() ? 3 : 2).map(word -> "Covered: " + word).toList());
-        List<String> improvements = expected.stream().filter(word -> !actual.contains(word)).limit(3).map(word -> "Expand on: " + word).toList();
-        if (strengths.isEmpty()) strengths = List.of("Clear, on-topic response");
-        if (improvements.isEmpty()) improvements = List.of("Add more specific detail");
-        return new Evaluation(Math.round(score * 10) / 10.0, strengths, improvements, "[\"score\"]", json(strengths), json(improvements));
-    }
-
-    private Set<String> words(String value) {
-        Set<String> stopWords = Set.of("a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on", "or", "that", "the", "this", "to", "was", "with");
-        return Arrays.stream(WORDS.split(value.toLowerCase(Locale.ROOT))).filter(word -> word.length() > 1 && !stopWords.contains(word))
-            .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-    }
     private String json(List<String> values) { return "[" + values.stream().map(value -> "\"" + value.replace("\"", "\\\"") + "\"").reduce((a, b) -> a + "," + b).orElse("") + "]"; }
 
     private record SessionRow(UUID id, String state, String difficulty, double profileMatch, Instant expiresAt) { }

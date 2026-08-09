@@ -9,8 +9,8 @@ public final class AiConfigurationValidator {
     public static void validate(Environment environment) {
         validate(
             environment.getProperty("AI_DATA_RETENTION_ACKNOWLEDGED", Boolean.class, false),
-            environment.getProperty("APP_ANSWER_EVALUATION_PROFILE", "stub"),
-            environment.getProperty("APP_QUESTION_ENRICHMENT_PROFILE", "disabled"),
+            environment.getProperty("APP_ANSWER_EVALUATION_PROFILE", "ai"),
+            environment.getProperty("APP_QUESTION_ENRICHMENT_PROFILE", "ai"),
             environment.getProperty("APP_EMBEDDING_PROFILE", "local"),
             environment.getProperty("VERTEX_PROJECT_ID", "")
         );

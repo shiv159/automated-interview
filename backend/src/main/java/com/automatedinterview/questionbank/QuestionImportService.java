@@ -30,7 +30,7 @@ public class QuestionImportService {
     private final String embeddingProfile;
 
     public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, VertexEmbeddingService embeddings,
-        @Value("${APP_QUESTION_ENRICHMENT_PROFILE:disabled}") String enrichmentProfile,
+        @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile,
         @Value("${APP_EMBEDDING_PROFILE:local}") String embeddingProfile) {
         this.jdbc = jdbc; this.enricher = enricher; this.embeddings = embeddings;
         this.enrichmentProfile = enrichmentProfile;
