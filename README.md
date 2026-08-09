@@ -73,3 +73,7 @@ bundle and do not access provider credentials.
 The repository is being implemented in the PRD milestone order: contracts,
 runtime foundation, document analysis, retrieval, question import, interview
 evaluation, Angular journeys, and final verification.
+
+Production does not seed demo questions. Import owner questions through the
+question-bank flow. Set `APP_QUESTION_BANK_SEED_ENABLED=true` only for local
+demo environments; keep it `false` in production.

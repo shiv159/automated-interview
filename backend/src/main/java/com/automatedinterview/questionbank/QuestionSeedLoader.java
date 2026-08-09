@@ -11,9 +11,11 @@ import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Component
 @Order(10)
+@ConditionalOnProperty(name = "app.question-bank.seed-enabled", havingValue = "true")
 public class QuestionSeedLoader implements CommandLineRunner {
     private final JdbcClient jdbc;
     private final VertexEmbeddingService embeddings;

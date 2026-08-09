@@ -1,3 +1,6 @@
+app:
+  question-bank:
+    seed-enabled: ${APP_QUESTION_BANK_SEED_ENABLED:false}
 server:
   port: 8080
 spring:
