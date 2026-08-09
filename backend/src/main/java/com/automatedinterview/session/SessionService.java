@@ -64,7 +64,7 @@ public class SessionService {
                 .param("expiresAt", java.sql.Timestamp.from(expiresAt)).update();
             saveClaims(id, "JOB", jobClaims, resumeSkills);
             saveClaims(id, "RESUME", resumeClaims, jobSkills);
-            return new CreatedSession(new SessionResponse(id, expiresAt, difficulty, profileMatch, jobClaims, resumeClaims, matched, missing), token);
+            return new CreatedSession(new SessionResponse(id, expiresAt, difficulty, profileMatch, markMatches(jobClaims, resumeSkills), markMatches(resumeClaims, jobSkills), matched, missing), token);
         } catch (SessionInputException | VertexSkillAnalyzer.SkillProviderException exception) {
             throw exception;
         } catch (IllegalArgumentException exception) {
@@ -106,6 +106,10 @@ public class SessionService {
                 """).param("sessionId", sessionId).param("documentType", documentType).param("skillId", claim.skillId())
                 .param("importance", claim.importance()).param("matched", matched).param("evidence", claim.evidence()).update();
         }
+    }
+
+    private static List<SkillClaim> markMatches(List<SkillClaim> claims, Set<String> otherSkills) {
+        return claims.stream().map(claim -> new SkillClaim(claim.skillId(), claim.importance(), claim.evidence(), otherSkills.contains(claim.skillId()))).toList();
     }
 
     private Set<String> ids(List<SkillClaim> claims) {

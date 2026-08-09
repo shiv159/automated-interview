@@ -176,7 +176,7 @@ public class InterviewService {
         double technical = evaluations.stream().filter(item -> item.type().equals("TECHNICAL")).mapToDouble(EvaluatedQuestion::score).average().orElse(0) * 10;
         double behavioral = evaluations.stream().filter(item -> item.type().equals("BEHAVIORAL")).mapToDouble(EvaluatedQuestion::score).findFirst().orElse(0) * 10;
         double interview = technical * .8 + behavioral * .2;
-        double readiness = session.profileMatch() * .3 + interview * .7;
+        double readiness = Math.round((session.profileMatch() * .3 + interview * .7) * 10) / 10.0;
         String label = readiness >= 80 ? "Ready" : readiness >= 65 ? "Nearly Ready" : readiness >= 50 ? "Developing" : "Significant Gaps";
         return new ReportResponse(sessionId, evaluations, session.profileMatch(), technical, behavioral, interview, readiness, label, Instant.now().plusSeconds(7200));
     }

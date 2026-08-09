@@ -1,12 +1,12 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { Component, signal } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [FormsModule, DatePipe],
+  imports: [FormsModule, DatePipe, DecimalPipe],
   template: `
     @if (isBank) {
       <main class="shell">
@@ -63,7 +63,7 @@ import { FormsModule } from '@angular/forms';
           <p>Missing: {{ session.missingSkills.join(', ') || 'None' }}</p>
           <div class="evidence" aria-label="Skill evidence">
             @for (claim of session.jobSkills; track claim.skillId) {
-              <p><strong>{{ claim.skillId }}</strong> · {{ claim.importance }}: “{{ claim.evidence }}”</p>
+              <p><strong>{{ claim.skillId }}</strong> · {{ claim.importance }}: “{{ evidenceText(claim) }}”</p>
             }
           </div>
           <button type="button" (click)="startInterview()" [disabled]="busy()">Start interview</button>
@@ -81,7 +81,7 @@ import { FormsModule } from '@angular/forms';
         <section class="result" aria-labelledby="report-title">
           <p class="eyebrow">Coaching report</p>
           <h2 id="report-title">{{ finalReport.readinessLabel }}</h2>
-          <p>Readiness: {{ finalReport.readinessScore }} · Interview: {{ finalReport.interviewScore }}</p>
+            <p>Readiness: {{ finalReport.readinessScore | number:'1.0-1' }} · Interview: {{ finalReport.interviewScore | number:'1.0-1' }}</p>
           @for (evaluation of finalReport.evaluations; track evaluation.position) {
             <article>
               <strong>Question {{ evaluation.position }} · {{ evaluation.score }}/10</strong>
@@ -124,6 +124,8 @@ class AppComponent {
       return Array.isArray(parsed) ? parsed.join(', ') : value;
     } catch { return value; }
   }
+
+  evidenceText(claim: any): string { return claim?.evidence ?? ''; }
 
   constructor() {
     if (this.isBank) void this.loadBank();
