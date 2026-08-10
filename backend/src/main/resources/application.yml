@@ -1,6 +1,12 @@
 app:
   question-bank:
     seed-enabled: ${APP_QUESTION_BANK_SEED_ENABLED:false}
+  ai:
+    enabled: ${APP_SPRING_AI_ENABLED:true}
+    max-attempts: ${APP_AI_MAX_ATTEMPTS:2}
+    retry-backoff-ms: ${APP_AI_RETRY_BACKOFF_MS:100}
+    embedding-dimensions: ${VERTEX_EMBEDDING_DIMENSIONS:768}
+    embedding-batch-size: ${APP_AI_EMBEDDING_BATCH_SIZE:32}
 server:
   port: 8080
 spring:
@@ -42,13 +48,6 @@ spring:
         include-error-logging: true
         log-prompt: false
         log-completion: false
-app:
-  ai:
-    enabled: ${APP_SPRING_AI_ENABLED:true}
-    max-attempts: ${APP_AI_MAX_ATTEMPTS:2}
-    retry-backoff-ms: ${APP_AI_RETRY_BACKOFF_MS:100}
-    embedding-dimensions: ${VERTEX_EMBEDDING_DIMENSIONS:768}
-    embedding-batch-size: ${APP_AI_EMBEDDING_BATCH_SIZE:32}
 logging:
   pattern:
     level: "%5p [corr=%X{correlationId:-none}]"
