@@ -5,6 +5,7 @@ import com.automatedinterview.session.SessionService;
 import com.automatedinterview.interview.InterviewService;
 import com.automatedinterview.questionbank.QuestionImportService;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
@@ -31,8 +32,13 @@ public class ProblemHandler {
     ResponseEntity<Problem> provider(VertexSkillAnalyzer.SkillProviderException exception, HttpServletRequest request) {
         log.warn("skill_analysis_error category={} providerFailure={} correlationId={}",
             exception.category(), exception.providerFailure(), MDC.get(ApiRequestLoggingFilter.CORRELATION_MDC_KEY));
-        int status = exception.providerFailure() ? 503 : 422;
-        String code = exception.providerFailure() ? "SKILL_ANALYSIS_UNAVAILABLE" : "SKILL_ANALYSIS_UNCERTAIN";
+        String code = switch (exception.category()) {
+            case "evidence_not_found", "missing_evidence", "evidence_crosses_line" -> "SKILL_EVIDENCE_INVALID";
+            case "duplicate_skill", "invalid_skill_id", "invalid_importance", "invalid_status", "invalid_skills" -> "SKILL_ANALYSIS_INVALID";
+            case "provider_uncertain" -> "SKILL_ANALYSIS_UNCERTAIN";
+            default -> exception.providerFailure() ? "AI_PROVIDER_UNAVAILABLE" : "SKILL_ANALYSIS_UNCERTAIN";
+        };
+        int status = Set.of("SKILL_EVIDENCE_INVALID", "SKILL_ANALYSIS_INVALID", "SKILL_ANALYSIS_UNCERTAIN").contains(code) ? 422 : 503;
         return response(code, status, request);
     }
 

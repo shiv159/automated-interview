@@ -30,20 +30,24 @@ public class DocumentTextExtractor {
         if (docxName && !contentType.isBlank() && !contentType.contains("wordprocessingml.document")) throw new IllegalArgumentException("UNSUPPORTED_DOCUMENT");
         if (textName) {
             try {
-                return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString();
+                return DocumentNormalizer.normalize(StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString());
             } catch (CharacterCodingException exception) { throw new IllegalArgumentException("INVALID_DOCUMENT", exception); }
         }
         if (pdfName) {
             if (bytes.length < 5 || !new String(bytes, 0, 5, StandardCharsets.US_ASCII).equals("%PDF-")) throw new IllegalArgumentException("INVALID_DOCUMENT");
             try (var document = Loader.loadPDF(bytes)) {
-                return new PDFTextStripper().getText(document);
+                String text = DocumentNormalizer.normalize(new PDFTextStripper().getText(document));
+                if (text.isBlank()) throw new IllegalArgumentException("DOCUMENT_TEXT_NOT_EXTRACTABLE");
+                return text;
             }
         }
         if (docxName) {
             if (!validDocx(bytes)) throw new IllegalArgumentException("INVALID_DOCUMENT");
             try (InputStream input = new ByteArrayInputStream(bytes); XWPFDocument document = new XWPFDocument(input);
              XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
-                return extractor.getText();
+                String text = DocumentNormalizer.normalize(extractor.getText());
+                if (text.isBlank()) throw new IllegalArgumentException("DOCUMENT_TEXT_NOT_EXTRACTABLE");
+                return text;
             }
         }
         throw new IllegalArgumentException("UNSUPPORTED_DOCUMENT");

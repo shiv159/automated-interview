@@ -7,7 +7,7 @@ public final class DocumentNormalizer {
 
     public static String normalize(String value) {
         if (value == null) return "";
-        String lf = value.replace("\r\n", "\n").replace('\r', '\n');
+        String lf = repairCommonMojibake(value.replace("\r\n", "\n").replace('\r', '\n'));
         StringBuilder result = new StringBuilder(lf.length());
         String[] lines = lf.split("\\n", -1);
         int first = 0;
@@ -23,5 +23,13 @@ public final class DocumentNormalizer {
         String normalized = result.toString().replaceAll("\\n{3,}", "\n\n");
         if (normalized.codePointCount(0, normalized.length()) > 30_000) throw new IllegalArgumentException("DOCUMENT_LIMIT_EXCEEDED");
         return normalized;
+    }
+
+    private static String repairCommonMojibake(String value) {
+        return value.replace("â€“", "-").replace("â€”", "-")
+            .replace("â€˜", "'").replace("â€™", "'")
+            .replace("â€œ", "\"").replace("â€", "\"")
+            .replace("â€¦", "...").replace("ï¿½", "")
+            .replace('\uFFFD', ' ');
     }
 }

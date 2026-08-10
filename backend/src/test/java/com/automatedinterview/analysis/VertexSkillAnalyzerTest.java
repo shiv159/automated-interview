@@ -90,6 +90,14 @@ class VertexSkillAnalyzerTest {
     }
 
     @Test
+    void validatedClaimsAllowsPdfExtractionPunctuationDifferences() {
+        List<SkillClaim> claims = validatedClaims("""
+            {"skills":[{"skillId":"CORE_JAVA","importance":"REQUIRED","evidence":"Java and Spring Boot"}]}
+            """, "Java, Spring Boot, and REST APIs");
+        assertEquals("CORE_JAVA", claims.get(0).skillId());
+    }
+
+    @Test
     void clipEvidenceCentersLongMatchesWithinTheLineBound() {
         String line = "a".repeat(220) + "quoted evidence" + "b".repeat(220);
 

@@ -15,4 +15,9 @@ class DocumentNormalizerTest {
         assertThrows(IllegalArgumentException.class, () -> DocumentNormalizer.normalize("valid\u0001text"));
         assertThrows(IllegalArgumentException.class, () -> DocumentNormalizer.normalize("x".repeat(30_001)));
     }
+
+    @Test
+    void repairsCommonMojibake() {
+        assertEquals("3-7 years and \"Java\"", DocumentNormalizer.normalize("3â€“7 years and â€œJavaâ€"));
+    }
 }
