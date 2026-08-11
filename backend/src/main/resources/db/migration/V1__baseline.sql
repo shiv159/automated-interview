@@ -8,6 +8,16 @@ CREATE TABLE skill (
     created_at timestamptz NOT NULL DEFAULT now()
 );
 
+INSERT INTO skill (id, display_name, aliases, catalog_version) VALUES
+('CORE_JAVA', 'Core Java', '["core java","java se","jdk","jvm","java"]'::jsonb, '2026-08-04.v1'),
+('SPRING_BOOT', 'Spring Boot', '["spring boot","spring framework","spring mvc","spring data","jpa","hibernate","spring"]'::jsonb, '2026-08-04.v1'),
+('SQL_RELATIONAL', 'SQL / Relational Databases', '["relational databases","relational database","rdbms","postgresql","postgres","mysql","oracle database","sql server","sql"]'::jsonb, '2026-08-04.v1'),
+('ANGULAR', 'Angular', '["angular framework","angularjs","angular"]'::jsonb, '2026-08-04.v1')
+ON CONFLICT (id) DO UPDATE SET
+    display_name = EXCLUDED.display_name,
+    aliases = EXCLUDED.aliases,
+    catalog_version = EXCLUDED.catalog_version;
+
 CREATE TABLE question (
     id uuid PRIMARY KEY,
     content_hash varchar(64) NOT NULL UNIQUE,
@@ -89,4 +99,3 @@ CREATE TABLE evaluation (
     model varchar(160),
     created_at timestamptz NOT NULL DEFAULT now()
 );
-
