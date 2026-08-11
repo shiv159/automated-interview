@@ -32,15 +32,17 @@ spring:
       genai:
         project-id: ${VERTEX_PROJECT_ID:}
         location: ${VERTEX_LOCATION:us-central1}
-        chat:
-          model: ${VERTEX_CHAT_MODEL:gemini-2.5-flash-lite}
-          temperature: 0.0
-          response-mime-type: application/json
         embedding:
+          project-id: ${VERTEX_PROJECT_ID:}
+          location: ${VERTEX_LOCATION:us-central1}
           text:
             model: ${VERTEX_EMBEDDING_MODEL:text-embedding-005}
             dimensions: ${VERTEX_EMBEDDING_DIMENSIONS:768}
             task-type: RETRIEVAL_DOCUMENT
+        chat:
+          model: ${VERTEX_CHAT_MODEL:gemini-2.5-flash-lite}
+          temperature: 0.0
+          response-mime-type: application/json
     chat:
       client:
         enabled: ${SPRING_AI_CHAT_CLIENT_ENABLED:true}
