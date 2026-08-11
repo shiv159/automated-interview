@@ -1,0 +1,125 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_PROJECT_NUMBER: ${{ vars.GCP_PROJECT_NUMBER }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
+  GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+  GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+  AR_REPOSITORY: ${{ vars.AR_REPOSITORY }}
+  BACKEND_SERVICE_NAME: automated-interview-backend
+  FRONTEND_SERVICE_NAME: automated-interview-frontend
+  VERTEX_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  VERTEX_LOCATION: ${{ vars.GCP_REGION }}
+  AI_DATA_RETENTION_ACKNOWLEDGED: true
+  APP_QUESTION_BANK_SEED_ENABLED: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test contracts
+        run: npm test --prefix contracts
+
+      - name: Test frontend
+        run: npm test --prefix frontend
+
+      - name: Build frontend
+        run: npm run build --prefix frontend
+
+      - name: Test backend
+        run: mvn test -q -f backend/pom.xml
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.GCP_WIF_PROVIDER }}
+          service_account: ${{ env.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build backend image
+        run: |
+          docker build -t "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${BACKEND_SERVICE_NAME}:${GITHUB_SHA}" backend
+
+      - name: Push backend image
+        run: |
+          docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${BACKEND_SERVICE_NAME}:${GITHUB_SHA}"
+
+      - name: Deploy backend
+        id: backend
+        run: |
+          gcloud run deploy "${BACKEND_SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${BACKEND_SERVICE_NAME}:${GITHUB_SHA}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},AI_DATA_RETENTION_ACKNOWLEDGED=${AI_DATA_RETENTION_ACKNOWLEDGED},APP_QUESTION_BANK_SEED_ENABLED=${APP_QUESTION_BANK_SEED_ENABLED},SPRING_DATASOURCE_URL=${{ secrets.SPRING_DATASOURCE_URL }},SPRING_DATASOURCE_USERNAME=${{ secrets.SPRING_DATASOURCE_USERNAME }},SPRING_DATASOURCE_PASSWORD=${{ secrets.SPRING_DATASOURCE_PASSWORD }}"
+
+      - name: Read backend URL
+        id: backend_url
+        run: |
+          echo "url=$(gcloud run services describe "${BACKEND_SERVICE_NAME}" --project "${GCP_PROJECT_ID}" --region "${GCP_REGION}" --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend image
+        run: |
+          docker build \
+            -t "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${FRONTEND_SERVICE_NAME}:${GITHUB_SHA}" \
+            frontend
+
+      - name: Push frontend image
+        run: |
+          docker push "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${FRONTEND_SERVICE_NAME}:${GITHUB_SHA}"
+
+      - name: Deploy frontend
+        run: |
+          gcloud run deploy "${FRONTEND_SERVICE_NAME}" \
+            --project "${GCP_PROJECT_ID}" \
+            --region "${GCP_REGION}" \
+            --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${FRONTEND_SERVICE_NAME}:${GITHUB_SHA}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars "BACKEND_UPSTREAM_URL=${{ steps.backend_url.outputs.url }}"
+
+      - name: Smoke test backend
+        run: |
+          curl -fsS "${{ steps.backend_url.outputs.url }}/api/health"
