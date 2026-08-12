@@ -2,7 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const template = fs.readFileSync('src/main.ts', 'utf8');
+import path from 'node:path';
+
+function getCodeContents(dir) {
+  let content = '';
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      content += getCodeContents(fullPath);
+    } else if (entry.name.endsWith('.ts')) {
+      content += fs.readFileSync(fullPath, 'utf8') + '\n';
+    }
+  }
+  return content;
+}
+
+const template = getCodeContents('src');
 const styles = fs.readFileSync('src/styles.css', 'utf8');
 const nginx = fs.readFileSync('nginx.conf', 'utf8');
 
