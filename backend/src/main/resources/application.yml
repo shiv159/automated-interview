@@ -18,6 +18,9 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/interview}
     username: ${SPRING_DATASOURCE_USERNAME:interview}
     password: ${SPRING_DATASOURCE_PASSWORD:interview-local-only}
+    hikari:
+      connection-timeout: ${SPRING_DATASOURCE_CONNECTION_TIMEOUT_MS:10000}
+      validation-timeout: ${SPRING_DATASOURCE_VALIDATION_TIMEOUT_MS:5000}
   servlet:
     multipart:
       max-file-size: 2MB
