@@ -2,8 +2,6 @@ package com.automatedinterview.interview;
 
 import com.automatedinterview.session.SessionService;
 import com.automatedinterview.ai.VertexAnswerEvaluator;
-import com.automatedinterview.ai.VertexEmbeddingService;
-import com.automatedinterview.questionbank.LocalEmbedding;
 import com.automatedinterview.document.DocumentNormalizer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -14,6 +12,9 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,14 +25,12 @@ public class InterviewService {
     private final JdbcClient jdbc;
     private final VertexAnswerEvaluator vertexEvaluator;
     private final String evaluationProfile;
-    private final VertexEmbeddingService embeddings;
-    private final String embeddingProfile;
+    private final VectorStore vectorStore;
 
-    public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator, VertexEmbeddingService embeddings,
-        @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile,
-        @org.springframework.beans.factory.annotation.Value("${APP_EMBEDDING_PROFILE:local}") String embeddingProfile) {
-        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.embeddings = embeddings;
-        this.evaluationProfile = evaluationProfile; this.embeddingProfile = embeddingProfile;
+    public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator, VectorStore vectorStore,
+        @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile) {
+        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.vectorStore = vectorStore;
+        this.evaluationProfile = evaluationProfile;
     }
 
     @Transactional
@@ -52,6 +51,7 @@ public class InterviewService {
             """).param("sessionId", sessionId).query((rs, row) -> new TargetSkill(rs.getString("skill_id"), rs.getString("display_name"),
                 rs.getString("importance"), rs.getBoolean("matched"), rs.getString("job_evidence"), rs.getString("resume_evidence"))).list();
         if (targets.isEmpty()) throw new InterviewException("QUESTION_BANK_UNAVAILABLE", 503);
+
         List<QuestionRow> technical = new ArrayList<>();
         Set<UUID> used = new HashSet<>();
         for (int position = 1; position <= 2; position++) {
@@ -59,33 +59,16 @@ public class InterviewService {
             for (int offset = 0; offset < targets.size(); offset++) {
                 TargetSkill target = targets.get((position - 1 + offset) % targets.size());
                 String queryText = queryText(target, session.difficulty());
-                String queryEmbedding;
-                try { queryEmbedding = embeddingProfile.equals("ai") ? embeddings.embedQuery(queryText) : LocalEmbedding.vector(queryText); }
-                catch (VertexEmbeddingService.ProviderUnavailable exception) { throw new InterviewException("EMBEDDING_UNAVAILABLE", 503); }
-                selected = jdbc.sql("""
-                    SELECT q.id, q.stem, q.type, q.primary_skill, q.difficulty, q.rubric, q.ideal_answer, q.content_hash
-                    FROM question q JOIN question_embedding qe ON qe.question_id = q.id
-                    WHERE q.type = 'TECHNICAL' AND q.status = 'ACTIVE' AND q.primary_skill = :skill
-                      AND q.difficulty = :difficulty AND (CAST(:excludeId AS uuid) IS NULL OR q.id <> CAST(:excludeId AS uuid))
-                    ORDER BY qe.embedding <=> CAST(:queryEmbedding AS vector), lower(q.id::text)
-                    LIMIT 1
-                    """).param("skill", target.skillId()).param("difficulty", session.difficulty()).param("excludeId", used.isEmpty() ? null : used.iterator().next())
-                    .param("queryEmbedding", queryEmbedding).query(this::question).optional().orElse(null);
+                selected = searchTechnical(queryText, target.skillId(), session.difficulty(), used);
                 if (selected != null) break;
             }
             if (selected == null) throw new InterviewException("QUESTION_BANK_UNAVAILABLE", 503);
             technical.add(selected); used.add(selected.id());
         }
-        String behavioralEmbedding;
-        try { behavioralEmbedding = embeddingProfile.equals("ai") ? embeddings.embed("behavioral communication teamwork problem solving reflection") : LocalEmbedding.vector("behavioral communication teamwork problem solving reflection"); }
-        catch (VertexEmbeddingService.ProviderUnavailable exception) { throw new InterviewException("EMBEDDING_UNAVAILABLE", 503); }
-        QuestionRow behavioral = jdbc.sql("""
-            SELECT q.id, q.stem, q.type, q.primary_skill, q.difficulty, q.rubric, q.ideal_answer, q.content_hash
-            FROM question q JOIN question_embedding qe ON qe.question_id = q.id
-            WHERE q.type = 'BEHAVIORAL' AND q.status = 'ACTIVE'
-            ORDER BY qe.embedding <=> CAST(:queryEmbedding AS vector), lower(q.id::text) LIMIT 1
-            """).param("queryEmbedding", behavioralEmbedding).query(this::question).optional()
-            .orElseThrow(() -> new InterviewException("QUESTION_BANK_UNAVAILABLE", 503));
+
+        QuestionRow behavioral = searchBehavioral();
+        if (behavioral == null) throw new InterviewException("QUESTION_BANK_UNAVAILABLE", 503);
+
         List<QuestionRow> questions = new ArrayList<>(technical);
         questions.add(behavioral);
         for (int index = 0; index < questions.size(); index++) {
@@ -100,6 +83,83 @@ public class InterviewService {
         }
         jdbc.sql("UPDATE interview_session SET state = 'INTERVIEWING' WHERE id = :id AND state = 'READY'").param("id", sessionId).update();
         return current(sessionId, token);
+    }
+
+    /**
+     * Searches the vector store for the best-matching ACTIVE TECHNICAL question for a given
+     * skill + difficulty, then validates and maps the result back to the relational {@code question} table.
+     * Excludes already-selected question IDs.
+     */
+    private QuestionRow searchTechnical(String queryText, String skillId, String difficulty, Set<UUID> excludeIds) {
+        var b = new FilterExpressionBuilder();
+        var filter = b.and(
+            b.and(
+                b.eq("type", "TECHNICAL"),
+                b.eq("primary_skill", skillId)
+            ),
+            b.and(
+                b.eq("difficulty", difficulty),
+                b.eq("status", "ACTIVE")
+            )
+        );
+        SearchRequest request = SearchRequest.builder()
+                .query(queryText)
+                .topK(excludeIds.isEmpty() ? 1 : excludeIds.size() + 1)
+                .filterExpression(filter.build())
+                .build();
+        return vectorStore.similaritySearch(request).stream()
+                .map(doc -> mapToQuestionRow(doc, skillId, difficulty))
+                .filter(q -> q != null && !excludeIds.contains(q.id()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    /** Searches the vector store for the best-matching ACTIVE BEHAVIORAL question. */
+    private QuestionRow searchBehavioral() {
+        var b = new FilterExpressionBuilder();
+        var filter = b.and(b.eq("type", "BEHAVIORAL"), b.eq("status", "ACTIVE"));
+        SearchRequest request = SearchRequest.builder()
+                .query("behavioral communication teamwork problem solving reflection")
+                .topK(1)
+                .filterExpression(filter.build())
+                .build();
+        return vectorStore.similaritySearch(request).stream()
+                .map(doc -> mapToQuestionRow(doc, null, null))
+                .filter(q -> q != null)
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Maps a Spring AI {@link org.springframework.ai.document.Document} back to an authoritative
+     * {@link QuestionRow} by re-fetching the domain row from the {@code question} table.
+     *
+     * <p>This guards against stale vector metadata: even if the vector store has an outdated
+     * status or skill, the domain row is the source of truth.
+     *
+     * @return null if the question is missing or no longer matches the requested constraints.
+     */
+    private QuestionRow mapToQuestionRow(org.springframework.ai.document.Document doc,
+                                          String expectedSkill, String expectedDifficulty) {
+        Object questionIdObj = doc.getMetadata().get("question_id");
+        if (questionIdObj == null) return null;
+        UUID questionId;
+        try { questionId = UUID.fromString(questionIdObj.toString()); }
+        catch (IllegalArgumentException e) { return null; }
+
+        return jdbc.sql("""
+            SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash
+            FROM question
+            WHERE id = :id AND status = 'ACTIVE'
+              AND (:skill::text IS NULL OR primary_skill = :skill)
+              AND (:difficulty::text IS NULL OR difficulty = :difficulty)
+            """)
+            .param("id", questionId)
+            .param("skill", expectedSkill)
+            .param("difficulty", expectedDifficulty)
+            .query(this::question)
+            .optional()
+            .orElse(null);
     }
 
     private String queryText(TargetSkill target, String difficulty) {

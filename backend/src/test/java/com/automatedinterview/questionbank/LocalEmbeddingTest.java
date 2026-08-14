@@ -9,8 +9,7 @@ class LocalEmbeddingTest {
     void producesStableFixedDimensionVectors() {
         String first = LocalEmbedding.vector("Java concurrency");
         assertEquals(first, LocalEmbedding.vector("Java concurrency"));
-        assertEquals(64, first.substring(1, first.length() - 1).split(",").length);
+        assertEquals(LocalEmbedding.DIMENSIONS, first.substring(1, first.length() - 1).split(",").length);
         assertNotEquals(first, LocalEmbedding.vector("Angular components"));
     }
 }
-

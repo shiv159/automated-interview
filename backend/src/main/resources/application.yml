@@ -1,6 +1,8 @@
 app:
   question-bank:
     seed-enabled: ${APP_QUESTION_BANK_SEED_ENABLED:false}
+  embedding:
+    profile: ${APP_EMBEDDING_PROFILE:local}
   ai:
     enabled: ${APP_SPRING_AI_ENABLED:true}
     max-attempts: ${APP_AI_MAX_ATTEMPTS:2}
@@ -24,6 +26,9 @@ spring:
     enabled: true
     locations: classpath:db/migration
   ai:
+    vectorstore:
+      pgvector:
+        initialize-schema: false
     model:
       chat: ${SPRING_AI_MODEL_CHAT:google-genai}
       embedding:
