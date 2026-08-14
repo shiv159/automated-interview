@@ -7,10 +7,13 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.embedding.EmbeddingResultMetadata;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +36,20 @@ import java.util.Map;
  */
 @Configuration
 public class EmbeddingConfig {
+
+    /**
+     * Explicitly creates the PgVector store because the project uses the
+     * library artifact rather than Spring AI's vector-store starter. Flyway
+     * owns the schema, so PgVectorStore schema initialization stays disabled.
+     */
+    @Bean
+    public VectorStore vectorStore(JdbcTemplate jdbcTemplate, EmbeddingModel embeddingModel) {
+        return PgVectorStore.builder(jdbcTemplate, embeddingModel)
+                .dimensions(LocalEmbedding.DIMENSIONS)
+                .vectorTableName("vector_store")
+                .initializeSchema(false)
+                .build();
+    }
 
     /**
      * Local (development/test) {@link EmbeddingModel} backed by {@link LocalEmbedding}.
