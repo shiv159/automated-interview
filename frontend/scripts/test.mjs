@@ -11,7 +11,7 @@ function getCodeContents(dir) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       content += getCodeContents(fullPath);
-    } else if (entry.name.endsWith('.ts')) {
+    } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.html')) {
       content += fs.readFileSync(fullPath, 'utf8') + '\n';
     }
   }
