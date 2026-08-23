@@ -3,6 +3,8 @@ package com.automatedinterview.questionbank;
 import com.automatedinterview.catalog.SkillCatalog;
 import com.automatedinterview.ai.VectorSyncService;
 import com.automatedinterview.ai.VertexQuestionEnricher;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -26,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class QuestionImportService {
     private static final Logger log = LoggerFactory.getLogger(QuestionImportService.class);
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final JdbcClient jdbc;
     private final VertexQuestionEnricher enricher;
     private final VectorSyncService vectorSync;
@@ -39,14 +42,15 @@ public class QuestionImportService {
 
     @Transactional
     public ImportResponse importFile(MultipartFile file) {
-        List<String> stems = normalize(file);
+        List<ImportItem> items = normalize(file);
         if (!enrichmentProfile.equals("ai")) throw new ImportException("QUESTION_ENRICHMENT_UNAVAILABLE", 503);
         int created = 0;
         int updated = 0;
         int bankSize = jdbc.sql("SELECT count(*) FROM question").query(Integer.class).single();
         List<QuestionBankController.QuestionSummary> summaries = new ArrayList<>();
-        for (String stem : stems) {
-            Classification classification = classify(stem);
+        for (ImportItem item : items) {
+            String stem = item.stem();
+            Classification classification = classify(item);
             VertexQuestionEnricher.Enrichment enrichment;
             try { enrichment = enricher.enrich(stem, classification.type(), classification.skill()); }
             catch (VertexQuestionEnricher.ProviderUnavailable exception) { throw new ImportException("QUESTION_ENRICHMENT_UNAVAILABLE", 503); }
@@ -76,11 +80,12 @@ public class QuestionImportService {
                 throw new ImportException("VECTOR_SYNC_UNAVAILABLE", 503, e);
             }
             summaries.add(jdbc.sql("""
-                SELECT id, stem, origin, status, type, primary_skill, difficulty, tags, updated_at
+                SELECT id, stem, origin, status, type, primary_skill, difficulty, tags, rubric, ideal_answer, updated_at
                 FROM question WHERE id = :id
                 """).param("id", id).query((rs, row) -> new QuestionBankController.QuestionSummary(
                     rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"), rs.getString("status"),
-                    rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("tags"),
+                     rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("tags"),
+                     rs.getString("rubric"), rs.getString("ideal_answer"),
                     rs.getTimestamp("updated_at").toInstant())).single());
             if (exists) updated++; else created++;
         }
@@ -111,7 +116,7 @@ public class QuestionImportService {
         }
     }
 
-    private List<String> normalize(MultipartFile file) {
+    private List<ImportItem> normalize(MultipartFile file) {
         try {
             if (file == null || file.getSize() > 65536) throw new ImportException("INVALID_QUESTION_FILE", 400);
             String value;
@@ -119,16 +124,15 @@ public class QuestionImportService {
             catch (CharacterCodingException exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
             if (value.startsWith("\ufeff")) value = value.substring(1);
             value = value.replace("\r\n", "\n").replace('\r', '\n');
-            List<String> lines = new ArrayList<>();
+            if ((file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".json")) || value.stripLeading().startsWith("["))
+                return normalizeJson(value);
+            List<ImportItem> lines = new ArrayList<>();
             Set<String> seen = new HashSet<>();
             for (String line : value.split("\n", -1)) {
-                String normalized = Normalizer.normalize(line.strip().replaceAll("\\s+", " "), Normalizer.Form.NFC);
+                String normalized = normalizeStem(line);
                 if (normalized.isBlank()) continue;
-                if (normalized.indexOf('\0') >= 0 || normalized.chars().anyMatch(character -> Character.isISOControl(character) && character != '\t'))
-                    throw new ImportException("INVALID_QUESTION_FILE", 400);
-                if (normalized.codePointCount(0, normalized.length()) < 10 || normalized.codePointCount(0, normalized.length()) > 1000 || !seen.add(normalized))
-                    throw new ImportException("INVALID_QUESTION_FILE", 400);
-                lines.add(normalized);
+                if (!seen.add(normalized)) throw new ImportException("INVALID_QUESTION_FILE", 400);
+                lines.add(new ImportItem(normalized, null, null, null));
             }
             if (lines.isEmpty() || lines.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
             return lines;
@@ -136,15 +140,62 @@ public class QuestionImportService {
         catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
     }
 
-    private Classification classify(String stem) {
+    private List<ImportItem> normalizeJson(String value) {
+        try {
+            JsonNode root = JSON.readTree(value);
+            if (root == null || !root.isArray() || root.isEmpty() || root.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
+            List<ImportItem> items = new ArrayList<>(); Set<String> seen = new HashSet<>();
+            for (JsonNode node : root) {
+                if (!node.isObject() || !node.hasNonNull("stem") || !node.get("stem").isTextual()) throw new ImportException("INVALID_QUESTION_FILE", 400);
+                String stem = normalizeStem(node.get("stem").asText());
+                if (stem.isBlank() || !seen.add(stem)) throw new ImportException("INVALID_QUESTION_FILE", 400);
+                String type = optionalText(node, "type"); String skill = optionalText(node, "primarySkill"); String difficulty = optionalText(node, "difficulty");
+                if (type != null && !Set.of("TECHNICAL", "BEHAVIORAL").contains(type)) throw new ImportException("INVALID_QUESTION_FILE", 400);
+                if (difficulty != null && !Set.of("EASY", "MEDIUM", "HARD").contains(difficulty)) throw new ImportException("INVALID_QUESTION_FILE", 400);
+                if (skill != null && SkillCatalog.SKILLS.stream().noneMatch(item -> item.id().equals(skill))) throw new ImportException("INVALID_QUESTION_FILE", 400);
+                if ("BEHAVIORAL".equals(type) && (skill != null || difficulty != null)) throw new ImportException("QUESTION_FIELD_CONFLICT", 422);
+                items.add(new ImportItem(stem, type, skill, difficulty));
+            }
+            return items;
+        } catch (ImportException exception) { throw exception; }
+        catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
+    }
+
+    private String optionalText(JsonNode node, String field) {
+        if (!node.has(field) || node.get(field).isNull()) return null;
+        if (!node.get(field).isTextual() || node.get(field).asText().isBlank()) throw new ImportException("INVALID_QUESTION_FILE", 400);
+        return node.get(field).asText();
+    }
+
+    private String normalizeStem(String value) {
+        String normalized = Normalizer.normalize(value.strip().replaceAll("\\s+", " "), Normalizer.Form.NFC);
+        if (normalized.indexOf('\0') >= 0 || normalized.chars().anyMatch(character -> Character.isISOControl(character) && character != '\t')) throw new ImportException("INVALID_QUESTION_FILE", 400);
+        if (!normalized.isBlank() && (normalized.codePointCount(0, normalized.length()) < 10 || normalized.codePointCount(0, normalized.length()) > 1000)) throw new ImportException("INVALID_QUESTION_FILE", 400);
+        return normalized;
+    }
+
+    private Classification classify(ImportItem item) {
+        String stem = item.stem();
+        if (item.type() != null) {
+            if (item.type().equals("BEHAVIORAL")) return new Classification("BEHAVIORAL", null, null);
+            List<String> matches = SkillCatalog.matchingSkillIds(stem.toLowerCase(Locale.ROOT));
+            String skill = item.primarySkill() != null ? item.primarySkill() : matches.size() == 1 ? matches.get(0) : null;
+            if (skill == null) throw new ImportException("QUESTION_SKILL_AMBIGUOUS", 422);
+            return new Classification("TECHNICAL", skill, item.difficulty() == null ? detectDifficulty(stem) : item.difficulty());
+        }
+        return classifyLegacy(stem);
+    }
+
+    private Classification classifyLegacy(String stem) {
         String lower = stem.toLowerCase(Locale.ROOT);
         if (List.of("tell me about a time", "describe a time", "give an example of when", "how did you handle").stream().anyMatch(lower::startsWith))
             return new Classification("BEHAVIORAL", null, null);
         List<String> matches = SkillCatalog.matchingSkillIds(lower);
         if (matches.size() != 1) throw new ImportException("QUESTION_SKILL_AMBIGUOUS", 422);
-        String difficulty = lower.contains("hard") ? "HARD" : lower.contains("easy") ? "EASY" : "MEDIUM";
-        return new Classification("TECHNICAL", matches.get(0), difficulty);
+        return new Classification("TECHNICAL", matches.get(0), detectDifficulty(stem));
     }
+
+    private String detectDifficulty(String stem) { String lower = stem.toLowerCase(Locale.ROOT); return lower.contains("hard") ? "HARD" : lower.contains("easy") ? "EASY" : "MEDIUM"; }
 
     private String hash(String value) {
         try {
@@ -153,6 +204,7 @@ public class QuestionImportService {
         } catch (Exception exception) { throw new IllegalStateException(exception); }
     }
 
+    private record ImportItem(String stem, String type, String primarySkill, String difficulty) { }
     private record Classification(String type, String skill, String difficulty) { }
     public record ImportResponse(int createdCount, int updatedCount, List<QuestionBankController.QuestionSummary> questions) { }
     public static class ImportException extends RuntimeException { private final String code; private final int status; public ImportException(String code, int status) { this(code, status, null); } public ImportException(String code, int status, Throwable cause) { super(cause); this.code = code; this.status = status; } public String code() { return code; } public int status() { return status; } }

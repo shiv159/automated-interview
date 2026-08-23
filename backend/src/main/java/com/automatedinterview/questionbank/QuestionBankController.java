@@ -38,21 +38,23 @@ public class QuestionBankController {
     @GetMapping
     public QuestionBankResponse list() {
         List<QuestionSummary> questions = jdbc.sql("""
-            SELECT id, stem, origin, status, type, primary_skill, difficulty, tags, updated_at
+            SELECT id, stem, origin, status, type, primary_skill, difficulty, tags, rubric, ideal_answer, updated_at
             FROM question ORDER BY origin, type, primary_skill NULLS LAST, difficulty NULLS LAST, id
             """).query((rs, row) -> new QuestionSummary(rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"),
-                rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("tags"), rs.getTimestamp("updated_at").toInstant())).list();
+                rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("tags"),
+                rs.getString("rubric"), rs.getString("ideal_answer"), rs.getTimestamp("updated_at").toInstant())).list();
         List<CoverageBucket> coverage = jdbc.sql("""
             SELECT type, primary_skill, difficulty, status, count(*) AS total
             FROM question GROUP BY type, primary_skill, difficulty, status
             ORDER BY type, primary_skill NULLS LAST, difficulty NULLS LAST, status
             """).query((rs, row) -> new CoverageBucket(rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("status"), rs.getLong("total"))).list();
         long active = questions.stream().filter(item -> item.status().equals("ACTIVE")).count();
-        return new QuestionBankResponse(questions, questions.size(), active, coverage);
+        long skillAreaCount = questions.stream().map(item -> item.primarySkill() == null ? "BEHAVIORAL" : item.primarySkill()).distinct().count();
+        return new QuestionBankResponse(questions, questions.size(), active, skillAreaCount, coverage);
     }
 
-    public record QuestionBankResponse(List<QuestionSummary> questions, int total, long activeCount, List<CoverageBucket> coverage) { }
-    public record QuestionSummary(UUID id, String stem, String origin, String status, String type, String primarySkill, String difficulty, String tags, Instant updatedAt) { }
+    public record QuestionBankResponse(List<QuestionSummary> questions, int total, long activeCount, long skillAreaCount, List<CoverageBucket> coverage) { }
+    public record QuestionSummary(UUID id, String stem, String origin, String status, String type, String primarySkill, String difficulty, String tags, String rubric, String idealAnswer, Instant updatedAt) { }
     public record CoverageBucket(String type, String primarySkill, String difficulty, String status, long count) { }
     public record StatusRequest(String status) { }
 }

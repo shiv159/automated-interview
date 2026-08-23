@@ -8,10 +8,10 @@ import java.util.UUID;
 public record SessionResponse(
     UUID id,
     Instant expiresAt,
+    String roleTitle,
     String difficulty,
     double profileMatch,
     List<SkillClaim> jobSkills,
     List<SkillClaim> resumeSkills,
     List<String> matchedSkills,
     List<String> missingSkills) { }
-

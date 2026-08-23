@@ -28,11 +28,11 @@ public class SessionController {
         @RequestParam MultipartFile jobDescription,
         @RequestParam MultipartFile resume,
         @RequestParam int yearsExperience,
-        @RequestParam boolean syntheticDataAttested) {
-        SessionService.CreatedSession created = service.create(jobDescription, resume, yearsExperience, syntheticDataAttested);
+        @RequestParam boolean syntheticDataAttested,
+        @RequestParam(defaultValue = "") String roleTitle) {
+        SessionService.CreatedSession created = service.create(jobDescription, resume, yearsExperience, syntheticDataAttested, roleTitle);
         ResponseCookie cookie = ResponseCookie.from("AIP_SESSION", created.token())
             .httpOnly(true).sameSite("Strict").path("/").maxAge(7200).build();
         return ResponseEntity.status(201).header(HttpHeaders.SET_COOKIE, cookie.toString()).body(created.response());
     }
 }
-

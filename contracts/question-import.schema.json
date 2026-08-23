@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "array",
+  "minItems": 1,
+  "maxItems": 10,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["stem"],
+    "properties": {
+      "stem": {"type": "string", "minLength": 10, "maxLength": 1000},
+      "type": {"enum": ["TECHNICAL", "BEHAVIORAL"]},
+      "primarySkill": {"type": ["string", "null"]},
+      "difficulty": {"enum": ["EASY", "MEDIUM", "HARD", null]}
+    }
+  }
+}

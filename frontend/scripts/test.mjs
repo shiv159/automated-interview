@@ -46,3 +46,16 @@ test('production proxy bounds forwarded headers and response buffers', () => {
   assert.match(nginx, /proxy_pass \$backend_upstream/);
   assert.match(nginx, /proxy_set_header Host \$proxy_host/);
 });
+
+test('deployed feature fixes are represented in the frontend contract usage', () => {
+  assert.match(template, /roleTitle/);
+  assert.match(template, /totalQuestions/);
+  assert.match(template, /completionPercent/);
+  assert.match(template, /primarySkill \?\? 'BEHAVIORAL'/);
+  assert.match(template, /idealAnswer/);
+  assert.match(template, /interviewScore \| number:'1\.0-1' }}<span>\/100/);
+  assert.match(template, /api\/v1\/documents\/preview/);
+  assert.doesNotMatch(template, /JAVA FULL-STACK ENGINEER/);
+  assert.doesNotMatch(template, /66% complete/);
+  assert.doesNotMatch(styles, /width:\s*66%/);
+});

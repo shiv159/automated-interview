@@ -34,9 +34,10 @@ public class SessionService {
     }
 
     @Transactional
-    public CreatedSession create(MultipartFile jobFile, MultipartFile resumeFile, int yearsExperience, boolean attested) {
+    public CreatedSession create(MultipartFile jobFile, MultipartFile resumeFile, int yearsExperience, boolean attested, String roleTitle) {
         if (yearsExperience < 0 || yearsExperience > 30) throw new SessionInputException("INVALID_EXPERIENCE");
         if (!attested) throw new SessionInputException("ATTESTATION_REQUIRED");
+        String normalizedRoleTitle = normalizeRoleTitle(roleTitle);
         try {
             String job = DocumentNormalizer.normalize(extractor.extract(jobFile));
             String resume = DocumentNormalizer.normalize(extractor.extract(resumeFile));
@@ -57,14 +58,14 @@ public class SessionService {
             String token = UUID.randomUUID().toString() + UUID.randomUUID();
             Instant expiresAt = Instant.now().plus(Duration.ofHours(2));
             jdbc.sql("""
-                INSERT INTO interview_session (id, token_hash, state, years_experience, difficulty, profile_match, expires_at)
-                VALUES (:id, :tokenHash, 'READY', :years, :difficulty, :profileMatch, :expiresAt)
+                INSERT INTO interview_session (id, token_hash, state, years_experience, difficulty, profile_match, expires_at, role_title)
+                VALUES (:id, :tokenHash, 'READY', :years, :difficulty, :profileMatch, :expiresAt, :roleTitle)
                 """).param("id", id).param("tokenHash", hash(token)).param("years", yearsExperience)
                 .param("difficulty", difficulty).param("profileMatch", profileMatch)
-                .param("expiresAt", java.sql.Timestamp.from(expiresAt)).update();
+                .param("expiresAt", java.sql.Timestamp.from(expiresAt)).param("roleTitle", normalizedRoleTitle).update();
             saveClaims(id, "JOB", jobClaims, resumeSkills);
             saveClaims(id, "RESUME", resumeClaims, jobSkills);
-            return new CreatedSession(new SessionResponse(id, expiresAt, difficulty, profileMatch, markMatches(jobClaims, resumeSkills), markMatches(resumeClaims, jobSkills), matched, missing), token);
+            return new CreatedSession(new SessionResponse(id, expiresAt, normalizedRoleTitle, difficulty, profileMatch, markMatches(jobClaims, resumeSkills), markMatches(resumeClaims, jobSkills), matched, missing), token);
         } catch (SessionInputException | VertexSkillAnalyzer.SkillProviderException exception) {
             throw exception;
         } catch (IllegalArgumentException exception) {
@@ -78,9 +79,9 @@ public class SessionService {
 
     public SessionResponse snapshot(UUID id, String token) {
         if (token == null || token.isBlank()) throw new SessionInputException("INVALID_SESSION_TOKEN");
-        SessionRow row = jdbc.sql("SELECT id, state, difficulty, profile_match, expires_at FROM interview_session WHERE id = :id AND token_hash = :tokenHash")
+        SessionRow row = jdbc.sql("SELECT id, state, difficulty, profile_match, expires_at, COALESCE(role_title, '') AS role_title FROM interview_session WHERE id = :id AND token_hash = :tokenHash")
             .param("id", id).param("tokenHash", hash(token)).query((rs, n) -> new SessionRow(
-                rs.getObject("id", UUID.class), rs.getString("difficulty"), rs.getDouble("profile_match"), rs.getTimestamp("expires_at").toInstant())).optional()
+                rs.getObject("id", UUID.class), rs.getString("difficulty"), rs.getDouble("profile_match"), rs.getTimestamp("expires_at").toInstant(), rs.getString("role_title"))).optional()
             .orElseThrow(() -> new SessionInputException("SESSION_NOT_FOUND"));
         if (!row.expiresAt().isAfter(Instant.now())) throw new SessionInputException("SESSION_EXPIRED");
         List<SkillClaim> job = claims(id, "JOB");
@@ -88,7 +89,7 @@ public class SessionService {
         Set<String> resumeIds = ids(resume);
         List<String> matched = job.stream().map(SkillClaim::skillId).filter(resumeIds::contains).distinct().toList();
         List<String> missing = job.stream().map(SkillClaim::skillId).filter(skill -> !resumeIds.contains(skill)).distinct().toList();
-        return new SessionResponse(id, row.expiresAt(), row.difficulty(), row.profileMatch(), job, resume, matched, missing);
+        return new SessionResponse(id, row.expiresAt(), row.roleTitle(), row.difficulty(), row.profileMatch(), job, resume, matched, missing);
     }
 
     private List<SkillClaim> claims(UUID id, String documentType) {
@@ -132,7 +133,14 @@ public class SessionService {
     }
 
     public record CreatedSession(SessionResponse response, String token) { }
-    private record SessionRow(UUID id, String difficulty, double profileMatch, Instant expiresAt) { }
+    private record SessionRow(UUID id, String difficulty, double profileMatch, Instant expiresAt, String roleTitle) { }
+
+    private String normalizeRoleTitle(String value) {
+        if (value == null) return "";
+        String normalized = DocumentNormalizer.normalize(value).strip();
+        if (normalized.codePointCount(0, normalized.length()) > 160) throw new SessionInputException("INVALID_ROLE_TITLE");
+        return normalized;
+    }
 
     public static class SessionInputException extends RuntimeException {
         private final String code;

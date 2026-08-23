@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 test('contract artifacts exist', () => {
-  for (const file of ['openapi.yaml', 'question-bank.schema.json', 'question-enrichment.schema.json', 'question-bank.json']) assert.equal(fs.existsSync(file), true, file);
+  for (const file of ['openapi.yaml', 'question-bank.schema.json', 'question-enrichment.schema.json', 'question-import.schema.json', 'question-bank.json']) assert.equal(fs.existsSync(file), true, file);
 });
 test('cross-field enrichment fixtures obey technical and behavioral shape', () => {
   const root = path.join('..', 'fixtures', 'question-imports', 'cross-field');
@@ -21,4 +21,13 @@ test('enrichment schema is closed', () => {
   const schema = JSON.parse(fs.readFileSync('question-enrichment.schema.json', 'utf8'));
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.properties.type.enum, ['TECHNICAL', 'BEHAVIORAL']);
+});
+
+test('API contract includes implemented feature responses', () => {
+  const openapi = fs.readFileSync('openapi.yaml', 'utf8');
+  assert.match(openapi, /roleTitle/);
+  assert.match(openapi, /\/api\/v1\/documents\/preview/);
+  assert.match(openapi, /QuestionBankResponse/);
+  assert.match(openapi, /ReportResponse/);
+  assert.match(openapi, /aggregate scores are 0-100/);
 });

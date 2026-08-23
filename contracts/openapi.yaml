@@ -21,12 +21,24 @@ paths:
                 resume: {type: string, format: binary}
                 yearsExperience: {type: integer, minimum: 0, maximum: 30}
                 syntheticDataAttested: {type: boolean}
-      responses: {'201': {description: Created}, '400': {description: Invalid input}, '503': {description: Provider unavailable}}
+                roleTitle: {type: string, maxLength: 160, description: Optional role title shown during interview practice}
+      responses:
+        '201':
+          description: Created
+          content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}
+        '400': {description: Invalid input}
+        '503': {description: Provider unavailable}
   /api/v1/question-bank:
     get:
-      responses: {'200': {description: Public question metadata}}
+      responses:
+        '200':
+          description: Public question metadata, including rubric and ideal answer
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuestionBankResponse'}
   /api/v1/question-bank/import:
     post:
+      description: Import up to 10 UTF-8 questions from a .txt file (one stem per line) or a .json file containing an array of structured question objects. AI enrichment supplies tags and ideal answers; duplicate stems update the existing owner-import question.
       requestBody:
         required: true
         content:
@@ -34,16 +46,35 @@ paths:
             schema:
               type: object
               required: [questionsFile]
-              properties: {questionsFile: {type: string, format: binary}}
-      responses: {'200': {description: Updated}, '201': {description: Created}, '422': {description: Rejected}}
+              properties:
+                questionsFile:
+                  type: string
+                  format: binary
+                  description: UTF-8 .txt or .json file; JSON objects use the QuestionImportItem schema.
+      responses:
+        '200':
+          description: Updated existing questions
+          content: {application/json: {schema: {$ref: '#/components/schemas/QuestionImportResponse'}}}
+        '201':
+          description: Created new questions
+          content: {application/json: {schema: {$ref: '#/components/schemas/QuestionImportResponse'}}}
+        '422': {description: Rejected}
   /api/v1/sessions/{sessionId}/interview:
     post:
       parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
-      responses: {'200': {description: Current question}}
+      responses:
+        '200':
+          description: Current question and interview progress
+          content: {application/json: {schema: {$ref: '#/components/schemas/QuestionResponse'}}}
   /api/v1/sessions/{sessionId}:
     get:
       parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
-      responses: {'200': {description: Session analysis snapshot}, '401': {description: Not owner}, '410': {description: Expired}}
+      responses:
+        '200':
+          description: Session analysis snapshot
+          content: {application/json: {schema: {$ref: '#/components/schemas/SessionResponse'}}}
+        '401': {description: Not owner}
+        '410': {description: Expired}
     delete:
       parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
       responses: {'204': {description: Deleted}, '401': {description: Not owner}}
@@ -55,11 +86,34 @@ paths:
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/AnswerRequest'}}}
-      responses: {'200': {description: Evaluation and next question}}
+      responses:
+        '200':
+          description: Evaluation and next question
+          content: {application/json: {schema: {$ref: '#/components/schemas/AnswerResponse'}}}
   /api/v1/sessions/{sessionId}/report:
     get:
       parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
-      responses: {'200': {description: Completed report}}
+      responses:
+        '200':
+          description: Completed report; aggregate scores are 0-100 and individual answer scores are 0-10
+          content: {application/json: {schema: {$ref: '#/components/schemas/ReportResponse'}}}
+  /api/v1/documents/preview:
+    post:
+      description: Extract a bounded text preview from a PDF or DOCX without creating a session.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties: {file: {type: string, format: binary}}
+      responses:
+        '200':
+          description: Extracted document preview
+          content: {application/json: {schema: {$ref: '#/components/schemas/DocumentPreviewResponse'}}}
+        '400': {description: Invalid or unsupported document}
+        '413': {description: Document exceeds the configured size or page limit}
   /api/v1/question-bank/questions/{id}/status:
     patch:
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
@@ -74,3 +128,119 @@ components:
       required: [answer]
       additionalProperties: false
       properties: {answer: {type: string, maxLength: 4000}}
+    SessionResponse:
+      type: object
+      required: [id, expiresAt, roleTitle, difficulty, profileMatch, jobSkills, resumeSkills, matchedSkills, missingSkills]
+      properties:
+        id: {type: string, format: uuid}
+        expiresAt: {type: string, format: date-time}
+        roleTitle: {type: string}
+        difficulty: {type: string}
+        profileMatch: {type: number, description: Aggregate profile match score from 0 to 100}
+        jobSkills: {type: array, items: {$ref: '#/components/schemas/SkillClaim'}}
+        resumeSkills: {type: array, items: {$ref: '#/components/schemas/SkillClaim'}}
+        matchedSkills: {type: array, items: {type: string}}
+        missingSkills: {type: array, items: {type: string}}
+    AnswerResponse:
+      type: object
+      required: [position, score, strengths, improvements, nextQuestion]
+      properties:
+        position: {type: integer}
+        score: {type: number, description: Individual answer score from 0 to 10}
+        strengths: {type: array, items: {type: string}}
+        improvements: {type: array, items: {type: string}}
+        nextQuestion: {oneOf: [{$ref: '#/components/schemas/QuestionResponse'}, {type: 'null'}]}
+    QuestionImportResponse:
+      type: object
+      required: [createdCount, updatedCount, questions]
+      properties:
+        createdCount: {type: integer}
+        updatedCount: {type: integer}
+        questions: {type: array, items: {$ref: '#/components/schemas/QuestionSummary'}}
+    Problem:
+      type: object
+      required: [type, title, status, detail, instance, code, correlationId]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code: {type: string}
+        correlationId: {type: string}
+    QuestionImportItem:
+      type: object
+      required: [stem]
+      additionalProperties: false
+      properties:
+        stem: {type: string, minLength: 10, maxLength: 1000}
+        type: {type: string, enum: [TECHNICAL, BEHAVIORAL]}
+        primarySkill: {type: string, description: Canonical skill ID required when technical classification is ambiguous}
+        difficulty: {type: string, enum: [EASY, MEDIUM, HARD]}
+    DocumentPreviewResponse:
+      type: object
+      required: [text, truncated, documentType]
+      properties:
+        text: {type: string}
+        truncated: {type: boolean}
+        documentType: {type: string, enum: [PDF, DOCX, TXT]}
+    SkillClaim:
+      type: object
+      required: [skillId, importance, evidence, matched]
+      properties:
+        skillId: {type: string}
+        importance: {type: string}
+        evidence: {type: string}
+        matched: {type: boolean}
+    QuestionSummary:
+      type: object
+      required: [id, stem, origin, status, type, tags, rubric, updatedAt]
+      properties:
+        id: {type: string, format: uuid}
+        stem: {type: string}
+        origin: {type: string}
+        status: {type: string}
+        type: {type: string, enum: [TECHNICAL, BEHAVIORAL]}
+        primarySkill: {type: [string, 'null']}
+        difficulty: {type: [string, 'null']}
+        tags: {type: string}
+        rubric: {type: string}
+        idealAnswer: {type: [string, 'null']}
+        updatedAt: {type: string, format: date-time}
+    QuestionBankResponse:
+      type: object
+      required: [questions, total, activeCount, skillAreaCount, coverage]
+      properties:
+        questions: {type: array, items: {$ref: '#/components/schemas/QuestionSummary'}}
+        total: {type: integer}
+        activeCount: {type: integer}
+        skillAreaCount: {type: integer}
+        coverage: {type: array, items: {type: object}}
+    QuestionResponse:
+      type: object
+      required: [instanceId, position, totalQuestions, roleTitle, type, stem, guidance]
+      properties:
+        instanceId: {type: string, format: uuid}
+        position: {type: integer}
+        totalQuestions: {type: integer}
+        roleTitle: {type: string}
+        type: {type: string}
+        primarySkill: {type: [string, 'null']}
+        difficulty: {type: [string, 'null']}
+        stem: {type: string}
+        criteria: {type: string}
+        guidance: {type: string}
+    ReportResponse:
+      type: object
+      required: [sessionId, roleTitle, evaluations, profileMatch, technicalScore, behavioralScore, interviewScore, readinessScore, readinessLabel, expiresAt]
+      properties:
+        sessionId: {type: string, format: uuid}
+        roleTitle: {type: string}
+        evaluations: {type: array, items: {type: object}}
+        profileMatch: {type: number, description: Aggregate score from 0 to 100}
+        technicalScore: {type: number, description: Aggregate score from 0 to 100}
+        behavioralScore: {type: number, description: Aggregate score from 0 to 100}
+        interviewScore: {type: number, description: Aggregate score from 0 to 100}
+        readinessScore: {type: number, description: Aggregate score from 0 to 100}
+        readinessLabel: {type: string}
+        expiresAt: {type: string, format: date-time}

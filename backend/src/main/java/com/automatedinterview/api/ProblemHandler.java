@@ -4,6 +4,7 @@ import com.automatedinterview.analysis.VertexSkillAnalyzer;
 import com.automatedinterview.session.SessionService;
 import com.automatedinterview.interview.InterviewService;
 import com.automatedinterview.questionbank.QuestionImportService;
+import com.automatedinterview.document.DocumentPreviewController;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -55,6 +56,12 @@ public class ProblemHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     ResponseEntity<Problem> uploadLimit(MaxUploadSizeExceededException exception, HttpServletRequest request) {
         return response("DOCUMENT_LIMIT_EXCEEDED", 413, request);
+    }
+
+    @ExceptionHandler(DocumentPreviewController.PreviewException.class)
+    ResponseEntity<Problem> preview(DocumentPreviewController.PreviewException exception, HttpServletRequest request) {
+        int status = Set.of("DOCUMENT_LIMIT_EXCEEDED").contains(exception.code()) ? 413 : 400;
+        return response(exception.code(), status, request);
     }
 
     private ResponseEntity<Problem> response(String code, int status, HttpServletRequest request) {

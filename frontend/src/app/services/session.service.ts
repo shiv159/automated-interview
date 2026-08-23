@@ -1,40 +1,69 @@
-import { Injectable, inject, resource, signal, ResourceStatus } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 export interface Session {
   id: string;
+  expiresAt: string;
+  roleTitle: string;
   profileMatch: number;
   difficulty: string;
   matchedSkills: string[];
   missingSkills: string[];
-  jobSkills: any[];
+  jobSkills: SkillClaim[];
+  resumeSkills: SkillClaim[];
 }
+
+export interface SkillClaim { skillId: string; importance: string; evidence: string; matched: boolean; }
 
 export interface Question {
   instanceId: string;
   position: number;
+  totalQuestions: number;
+  roleTitle: string;
+  type: 'TECHNICAL' | 'BEHAVIORAL';
+  primarySkill?: string | null;
+  difficulty?: string | null;
   stem: string;
+  criteria: string;
+  guidance: string;
+}
+
+export interface Evaluation {
+  position: number;
+  type: 'TECHNICAL' | 'BEHAVIORAL';
+  primarySkill?: string | null;
+  stem: string;
+  criteria: string;
+  score: number;
+  strengths: string | string[];
+  improvements: string | string[];
 }
 
 export interface Report {
   sessionId: string;
+  roleTitle: string;
+  profileMatch: number;
+  technicalScore: number;
+  behavioralScore: number;
   readinessLabel: string;
   readinessScore: number;
   interviewScore: number;
-  evaluations: any[];
+  expiresAt: string;
+  evaluations: Evaluation[];
 }
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
   private http = inject(HttpClient);
 
-  async createSession(jobFile: File, resumeFile: File, yearsExperience: number, syntheticDataAttested: boolean): Promise<Session> {
+  async createSession(jobFile: File, resumeFile: File, yearsExperience: number, syntheticDataAttested: boolean, roleTitle = ''): Promise<Session> {
     const body = new FormData();
     body.append('jobDescription', jobFile);
     body.append('resume', resumeFile);
     body.append('yearsExperience', String(yearsExperience));
     body.append('syntheticDataAttested', String(syntheticDataAttested));
+    body.append('roleTitle', roleTitle);
     
     return firstValueFrom(this.http.post<Session>('/api/v1/sessions', body, { withCredentials: true }));
   }
@@ -53,6 +82,12 @@ export class SessionService {
       { answer: answerText },
       { withCredentials: true }
     ));
+  }
+
+  async previewDocument(file: File): Promise<{ text: string; truncated: boolean; documentType: string }> {
+    const body = new FormData();
+    body.append('file', file);
+    return firstValueFrom(this.http.post<{ text: string; truncated: boolean; documentType: string }>('/api/v1/documents/preview', body));
   }
 
   async getReport(sessionId: string): Promise<Report> {
