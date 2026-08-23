@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -57,15 +58,18 @@ public class SessionService {
             UUID id = UUID.randomUUID();
             String token = UUID.randomUUID().toString() + UUID.randomUUID();
             Instant expiresAt = Instant.now().plus(Duration.ofHours(2));
+            // PostgreSQL timestamp precision is microseconds; return the same precision
+            // that later snapshot/report reads will return from the persisted row.
+            Instant persistedExpiresAt = expiresAt.truncatedTo(ChronoUnit.MICROS);
             jdbc.sql("""
                 INSERT INTO interview_session (id, token_hash, state, years_experience, difficulty, profile_match, expires_at, role_title)
                 VALUES (:id, :tokenHash, 'READY', :years, :difficulty, :profileMatch, :expiresAt, :roleTitle)
                 """).param("id", id).param("tokenHash", hash(token)).param("years", yearsExperience)
                 .param("difficulty", difficulty).param("profileMatch", profileMatch)
-                .param("expiresAt", java.sql.Timestamp.from(expiresAt)).param("roleTitle", normalizedRoleTitle).update();
+                .param("expiresAt", java.sql.Timestamp.from(persistedExpiresAt)).param("roleTitle", normalizedRoleTitle).update();
             saveClaims(id, "JOB", jobClaims, resumeSkills);
             saveClaims(id, "RESUME", resumeClaims, jobSkills);
-            return new CreatedSession(new SessionResponse(id, expiresAt, normalizedRoleTitle, difficulty, profileMatch, markMatches(jobClaims, resumeSkills), markMatches(resumeClaims, jobSkills), matched, missing), token);
+            return new CreatedSession(new SessionResponse(id, persistedExpiresAt, normalizedRoleTitle, difficulty, profileMatch, markMatches(jobClaims, resumeSkills), markMatches(resumeClaims, jobSkills), matched, missing), token);
         } catch (SessionInputException | VertexSkillAnalyzer.SkillProviderException exception) {
             throw exception;
         } catch (IllegalArgumentException exception) {
