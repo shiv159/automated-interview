@@ -19,8 +19,12 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:interview}
     password: ${SPRING_DATASOURCE_PASSWORD:interview-local-only}
     hikari:
-      connection-timeout: ${SPRING_DATASOURCE_CONNECTION_TIMEOUT_MS:10000}
+      connection-timeout: ${SPRING_DATASOURCE_CONNECTION_TIMEOUT_MS:30000}
       validation-timeout: ${SPRING_DATASOURCE_VALIDATION_TIMEOUT_MS:5000}
+      max-lifetime: ${SPRING_DATASOURCE_MAX_LIFETIME_MS:1800000}
+      keepalive-time: ${SPRING_DATASOURCE_KEEPALIVE_TIME_MS:30000}
+      minimum-idle: ${SPRING_DATASOURCE_MINIMUM_IDLE:1}
+      maximum-pool-size: ${SPRING_DATASOURCE_MAXIMUM_POOL_SIZE:5}
   servlet:
     multipart:
       max-file-size: 2MB
