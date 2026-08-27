@@ -52,95 +52,67 @@ flowchart TD
 
 ---
 
-## Database Architecture & ER Diagram
+## Database Schema (Simplified)
 
-The platform utilizes PostgreSQL with the `pgvector` extension for relational data, question cataloging, session state tracking, and vector-based semantic retrieval.
+The core data model manages question cataloging, candidate sessions, vector retrieval (`pgvector`), and evaluations.
 
 ```mermaid
 erDiagram
-    SKILL ||--o{ QUESTION : "categorizes"
-    SKILL ||--o{ SESSION_SKILL : "referenced in"
-    QUESTION ||--o{ SESSION_QUESTION : "instantiated as"
-    QUESTION ||..|| VECTOR_STORE : "indexed in (pgvector)"
+    SKILL ||--o{ QUESTION : categorizes
+    SKILL ||--o{ SESSION_SKILL : references
+    QUESTION ||..|| VECTOR_STORE : embeds
     INTERVIEW_SESSION ||--o{ SESSION_SKILL : "extracted skills"
     INTERVIEW_SESSION ||--o{ SESSION_QUESTION : "assigned questions"
-    SESSION_QUESTION ||--o| EVALUATION : "evaluated by"
+    QUESTION ||--o{ SESSION_QUESTION : instantiates
+    SESSION_QUESTION ||--o| EVALUATION : evaluated_by
 
     SKILL {
-        varchar id PK "Canonical skill identifier (e.g. CORE_JAVA)"
-        varchar display_name "Human readable name"
-        jsonb aliases "Recognized skill variations & synonyms"
-        varchar catalog_version "Catalog version tag"
-        timestamptz created_at
+        varchar id PK
+        varchar display_name
+        jsonb aliases
     }
 
     QUESTION {
         uuid id PK
-        varchar content_hash UK "SHA-256 for deduplication"
-        text stem "Question prompt text"
-        varchar type "TECHNICAL or BEHAVIORAL"
-        varchar primary_skill FK "Associated skill ID"
-        varchar difficulty "Difficulty tier"
-        jsonb tags "Keywords / topics"
-        jsonb rubric "Evaluation rubrics"
-        text ideal_answer "Reference answer"
-        varchar origin "SEED or OWNER_IMPORT"
-        varchar status "ACTIVE or INACTIVE"
-        varchar indexing_status "PENDING, PROCESSING, INDEXED, FAILED"
-        timestamptz created_at
+        varchar primary_skill FK
+        text stem
+        varchar type
+        varchar difficulty
+        jsonb rubric
     }
 
     VECTOR_STORE {
-        uuid id PK "Corresponds to Question ID"
-        text content "Indexed question text"
-        json metadata "Filtering metadata (skill, difficulty, type)"
-        vector_768 embedding "HNSW indexed cosine embedding"
+        uuid id PK
+        vector embedding
+        json metadata
     }
 
     INTERVIEW_SESSION {
         uuid id PK
-        varchar token_hash "Secure candidate access token"
-        varchar role_title "Target job role"
-        varchar state "READY, INTERVIEWING, REPORT_READY, DELETED"
-        integer years_experience "Years of experience"
-        varchar difficulty "Target interview level"
-        numeric profile_match "Match score (0-100%)"
-        jsonb soft_skill_requirements "Soft skills extracted"
-        jsonb domain_requirements "Domain skills extracted"
-        timestamptz created_at
-        timestamptz expires_at
+        varchar role_title
+        varchar state
+        numeric profile_match
     }
 
     SESSION_SKILL {
         uuid session_id PK,FK
-        varchar document_type PK "JOB or RESUME"
         varchar skill_id PK,FK
-        varchar importance "Skill weight/priority"
-        boolean matched "Matched between job & resume"
-        text evidence "Extracted textual evidence"
+        boolean matched
     }
 
     SESSION_QUESTION {
         uuid id PK
         uuid session_id FK
         uuid question_id FK
-        integer position "Question sequence (1 to 3)"
-        varchar status "LOCKED, ACTIVE, EVALUATING, EVALUATED"
-        text stem "Snapshot of question stem"
-        jsonb criteria "Evaluation rubric snapshot"
-        timestamptz accepted_at
+        integer position
+        varchar status
     }
 
     EVALUATION {
         uuid id PK
-        uuid session_question_id FK,UK
-        jsonb criteria_scores "Criteria-level breakdown"
-        jsonb strengths "Identified strong points"
-        jsonb improvements "Areas for growth"
-        numeric score "Overall normalized score (0-100)"
-        varchar adapter "AI adapter used (vertex / local)"
-        varchar model "Model identifier"
-        timestamptz created_at
+        uuid session_question_id FK
+        numeric score
+        jsonb criteria_scores
     }
 ```
 
