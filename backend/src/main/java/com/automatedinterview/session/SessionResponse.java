@@ -15,4 +15,6 @@ public record SessionResponse(
     List<SkillClaim> resumeSkills,
     List<String> matchedSkills,
     List<String> missingSkills,
-    List<String> unsupportedJobSkills) { }
+    List<String> unsupportedJobSkills,
+    List<String> softSkillRequirements,
+    List<String> domainRequirements) { }

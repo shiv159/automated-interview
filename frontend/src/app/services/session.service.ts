@@ -11,6 +11,8 @@ export interface Session {
   matchedSkills: string[];
   missingSkills: string[];
   unsupportedJobSkills: string[];
+  softSkillRequirements: string[];
+  domainRequirements: string[];
   jobSkills: SkillClaim[];
   resumeSkills: SkillClaim[];
 }
@@ -60,6 +62,8 @@ export interface Report {
   matchedSkills?: string[];
   missingSkills?: string[];
   unsupportedJobSkills?: string[];
+  softSkillRequirements?: string[];
+  domainRequirements?: string[];
 }
 
 @Injectable({ providedIn: 'root' })

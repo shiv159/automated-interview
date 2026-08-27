@@ -38,15 +38,20 @@ public class VertexSkillAnalyzer {
 
     public AnalysisResult analyzeResult(String documentType, String document) {
         if (springAiClient == null) throw new SkillProviderException(true);
-        if (document == null || document.isBlank()) return new AnalysisResult(List.of(), List.of());
+        if (document == null || document.isBlank()) return new AnalysisResult(List.of(), List.of(), List.of(), List.of());
         List<List<SkillClaim>> perChunkClaims = new ArrayList<>();
         Set<String> unsupported = new HashSet<>();
+        Set<String> softSkills = new HashSet<>();
+        Set<String> domains = new HashSet<>();
         for (String chunk : chunks(document)) {
             AnalysisResult result = analyzeChunkResult(documentType, chunk, false);
             perChunkClaims.add(result.claims());
             unsupported.addAll(result.unsupportedRequirements());
+            softSkills.addAll(result.softSkillRequirements());
+            domains.addAll(result.domainRequirements());
         }
-        return new AnalysisResult(aggregateClaims(perChunkClaims).stream().map(claim -> new SkillClaim(claim.skillId(), claim.importance(), clip(claim.evidence()), false)).toList(), List.copyOf(unsupported));
+        List<String> technical = unsupported.stream().filter(value -> classify(value) == RequirementCategory.UNSUPPORTED_TECHNICAL).sorted().toList();
+        return new AnalysisResult(aggregateClaims(perChunkClaims).stream().map(claim -> new SkillClaim(claim.skillId(), claim.importance(), clip(claim.evidence()), false)).toList(), technical, softSkills.stream().sorted().toList(), domains.stream().sorted().toList());
     }
 
     private List<SkillClaim> analyzeChunk(String documentType, String document, boolean correction) {
@@ -70,7 +75,12 @@ public class VertexSkillAnalyzer {
                     .useProviderStructuredOutput()
                     .validateSchema()));
             JsonNode output = mapper.valueToTree(response);
-            return new AnalysisResult(validatedClaims(sanitizeSpringAiClaims(output, document), document), response.unsupportedRequirements() == null ? List.of() : response.unsupportedRequirements());
+            List<String> requirements = classifyRequirements(response.unsupportedRequirements());
+            List<String> softRequirements = classifyRequirements(response.softSkillRequirements());
+            List<String> domainRequirements = classifyRequirements(response.domainRequirements());
+            return new AnalysisResult(validatedClaims(sanitizeSpringAiClaims(output, document), document), requirements,
+                distinctConcat(softRequirements, requirements.stream().filter(value -> classify(value) == RequirementCategory.SOFT_SKILL).toList()),
+                distinctConcat(domainRequirements, requirements.stream().filter(value -> classify(value) == RequirementCategory.DOMAIN).toList()));
         } catch (SkillProviderException exception) {
             if (!correction && exception.providerFailure() && Set.of("evidence_not_found", "duplicate_skill", "missing_evidence").contains(exception.category()))
                 return analyzeChunkResult(documentType, document, true);
@@ -231,9 +241,29 @@ public class VertexSkillAnalyzer {
             .replace('\u2013', '-').replace('\u2014', '-');
     }
 
-    public record AnalysisResult(List<SkillClaim> claims, List<String> unsupportedRequirements) { }
-    public record SkillAnalysisResponse(String status, @Size(max = 20) List<SkillAnalysisClaim> skills, @Size(max = 20) List<String> unsupportedRequirements) { }
+    public enum RequirementCategory { UNSUPPORTED_TECHNICAL, SOFT_SKILL, DOMAIN, CONTEXT }
+    public record AnalysisResult(List<SkillClaim> claims, List<String> unsupportedRequirements, List<String> softSkillRequirements, List<String> domainRequirements) {
+        public List<String> unsupportedTechnicalSkills() { return unsupportedRequirements; }
+    }
+    public record SkillAnalysisResponse(String status, @Size(max = 20) List<SkillAnalysisClaim> skills, @Size(max = 20) List<String> unsupportedRequirements, @Size(max = 20) List<String> softSkillRequirements, @Size(max = 20) List<String> domainRequirements) { }
     public record SkillAnalysisClaim(String skillId, String importance, String evidence) { }
+
+    private static List<String> classifyRequirements(List<String> values) {
+        return values == null ? List.of() : values.stream().filter(value -> value != null && !value.isBlank()).map(String::strip).distinct().toList();
+    }
+
+    private static List<String> distinctConcat(List<String> first, List<String> second) {
+        java.util.LinkedHashSet<String> values = new java.util.LinkedHashSet<>(first);
+        values.addAll(second);
+        return List.copyOf(values);
+    }
+
+    private static RequirementCategory classify(String value) {
+        String v = value.toLowerCase(java.util.Locale.ROOT);
+        if (v.matches(".*(communication|problem-solving|adaptability|ownership|confidence|clarity|logical thinking|willingness to learn|cultural fit|honesty|follow-up questions).*")) return RequirementCategory.SOFT_SKILL;
+        if (v.matches(".*(fintech|financial services|banking|invoice factoring|invoice discounting|working capital).*")) return RequirementCategory.DOMAIN;
+        return RequirementCategory.UNSUPPORTED_TECHNICAL;
+    }
 
     public static class SkillProviderException extends RuntimeException {
         private final boolean providerFailure;
