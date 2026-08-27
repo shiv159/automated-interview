@@ -34,14 +34,20 @@ public class QuestionIndexingWorker {
 
     @Scheduled(fixedDelayString = "${APP_AI_INDEXING_POLL_MS:5000}")
     public void processDueQuestions() {
-        for (Question question : claimBatch()) {
-            try {
-                vectorSync.upsert(question.id(), question.stem(), question.type(), question.skill(), question.difficulty(), "ACTIVE");
-                markIndexed(question);
-            } catch (Exception exception) {
-                markFailed(question, exception);
-                log.warn("Question indexing failed id={} attempt={}", question.id(), question.attempts());
+        try {
+            for (Question question : claimBatch()) {
+                try {
+                    vectorSync.upsert(question.id(), question.stem(), question.type(), question.skill(), question.difficulty(), "ACTIVE");
+                    markIndexed(question);
+                } catch (Exception exception) {
+                    markFailed(question, exception);
+                    log.warn("Question indexing failed id={} attempt={}", question.id(), question.attempts());
+                }
             }
+        } catch (org.springframework.dao.DataAccessException exception) {
+            log.debug("Database currently unavailable for indexing poll: {}", exception.getMessage());
+        } catch (Exception exception) {
+            log.warn("Unexpected error during question indexing: {}", exception.getMessage());
         }
     }
 
