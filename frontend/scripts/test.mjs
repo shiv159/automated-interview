@@ -20,6 +20,7 @@ function getCodeContents(dir) {
 
 const template = getCodeContents('src');
 const styles = fs.readFileSync('src/styles.css', 'utf8');
+const reportStyles = fs.readFileSync('src/app/components/report/report.component.scss', 'utf8');
 const nginx = fs.readFileSync('nginx.conf', 'utf8');
 
 test('candidate and owner journeys expose required routes and actions', () => {
@@ -53,9 +54,42 @@ test('deployed feature fixes are represented in the frontend contract usage', ()
   assert.match(template, /completionPercent/);
   assert.match(template, /primarySkill \?\? 'BEHAVIORAL'/);
   assert.match(template, /idealAnswer/);
-  assert.match(template, /interviewScore \| number:'1\.0-1' }}<span>\/100/);
+  assert.match(template, /interviewScore \| number:'1\.0-1' }}(?:<span>)?\/100/);
   assert.match(template, /api\/v1\/documents\/preview/);
   assert.doesNotMatch(template, /JAVA FULL-STACK ENGINEER/);
   assert.doesNotMatch(template, /66% complete/);
   assert.doesNotMatch(styles, /width:\s*66%/);
+});
+
+test('candidate review exposes job, resume-only, and unsupported skill evidence', () => {
+  assert.match(template, /additionalClaims/);
+  assert.match(template, /resumeSkills/);
+  assert.match(template, /unsupportedJobSkills/);
+});
+
+test('known API failures have actionable frontend messages', () => {
+  for (const code of ['ATTESTATION_REQUIRED', 'NO_SUPPORTED_SKILLS', 'INVALID_ANSWER', 'AI_PROVIDER_UNAVAILABLE', 'SKILL_ANALYSIS_UNCERTAIN', 'SKILL_ANALYSIS_INVALID', 'SKILL_EVIDENCE_INVALID', 'REPORT_NOT_READY']) {
+    assert.match(template, new RegExp(`${code}\\s*:`));
+  }
+  assert.match(template, /error\.error\.errors/);
+  assert.match(template, /item\.hint/);
+});
+
+test('report exposes score breakdown and criterion scores', () => {
+  assert.match(template, /technicalScore/);
+  assert.match(template, /behavioralScore/);
+  assert.match(template, /criteriaScores/);
+  assert.match(template, /30%|0\.3/);
+  assert.match(template, /80%|0\.8/);
+});
+
+test('experience input is constrained to whole years and progress tracks completed questions', () => {
+  assert.match(template, /name="years"[^>]*step="1"/);
+  assert.match(template, /completedQuestions/);
+});
+
+test('report export includes JSON and CSV output with print rules', () => {
+  assert.match(template, /Download JSON \+ CSV/);
+  assert.match(template, /text\/csv/);
+  assert.match(reportStyles, /@media print/);
 });

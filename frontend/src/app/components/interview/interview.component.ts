@@ -16,7 +16,8 @@ export class InterviewComponent implements OnInit, OnDestroy {
   ngOnDestroy() { if (this.timerId) window.clearInterval(this.timerId); this.recognition?.stop(); }
   startTimer() { this.timerId = window.setInterval(() => { if (this.timerRunning) this.elapsedSeconds++; }, 1000); }
   get timerLabel() { return `${String(Math.floor(this.elapsedSeconds / 60)).padStart(2, '0')}:${String(this.elapsedSeconds % 60).padStart(2, '0')}`; }
-  get completionPercent() { const current = this.question(); return current ? Math.round((current.position / Math.max(current.totalQuestions, 1)) * 100) : 100; }
+  get completionPercent() { const current = this.question(); return current ? Math.round((this.completedQuestions / Math.max(current.totalQuestions, 1)) * 100) : 100; }
+  get completedQuestions() { const current = this.question(); return current ? current.position - 1 : 0; }
   resetTimer() { this.elapsedSeconds = 0; }
   get wordCount() { return this.answerText.trim() ? this.answerText.trim().split(/\s+/).length : 0; }
   get pacingLabel() { return this.wordCount < 40 ? 'Short' : this.wordCount <= 200 ? 'Good length' : 'Detailed'; }

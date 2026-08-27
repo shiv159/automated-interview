@@ -6,6 +6,7 @@ import com.automatedinterview.interview.InterviewService;
 import com.automatedinterview.questionbank.QuestionImportService;
 import com.automatedinterview.document.DocumentPreviewController;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import jakarta.servlet.http.HttpServletRequest;
@@ -50,7 +51,7 @@ public class ProblemHandler {
 
     @ExceptionHandler(QuestionImportService.ImportException.class)
     ResponseEntity<Problem> importProblem(QuestionImportService.ImportException exception, HttpServletRequest request) {
-        return response(exception.code(), exception.status(), request);
+        return response(exception.code(), exception.status(), request, exception.getMessage(), exception.item(), exception.line(), exception.field(), exception.hint(), exception.errors());
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -65,15 +66,30 @@ public class ProblemHandler {
     }
 
     private ResponseEntity<Problem> response(String code, int status, HttpServletRequest request) {
+        return response(code, status, request, code);
+    }
+
+    private ResponseEntity<Problem> response(String code, int status, HttpServletRequest request, String detail) {
+        return response(code, status, request, detail, null, null, null, null);
+    }
+
+    private ResponseEntity<Problem> response(String code, int status, HttpServletRequest request, String detail,
+        Integer item, Integer line, String field, String hint) {
+        return response(code, status, request, detail, item, line, field, hint, List.of());
+    }
+
+    private ResponseEntity<Problem> response(String code, int status, HttpServletRequest request, String detail,
+        Integer item, Integer line, String field, String hint, List<QuestionImportService.ImportDiagnostic> errors) {
         log.warn("api_error method={} path={} status={} code={} correlationId={}",
             request.getMethod(), request.getRequestURI(), status, code,
             MDC.get(ApiRequestLoggingFilter.CORRELATION_MDC_KEY));
         String correlationId = MDC.get(ApiRequestLoggingFilter.CORRELATION_MDC_KEY);
         if (correlationId == null || correlationId.isBlank()) correlationId = UUID.randomUUID().toString();
-        Problem problem = new Problem("urn:automated-interview:problem:" + code, code, status, code,
-            request.getRequestURI(), code, correlationId);
+        Problem problem = new Problem("urn:automated-interview:problem:" + code, code, status, detail == null || detail.isBlank() ? code : detail,
+            request.getRequestURI(), code, correlationId, item, line, field, hint, errors);
         return ResponseEntity.status(status).contentType(MediaType.APPLICATION_PROBLEM_JSON).body(problem);
     }
 
-    public record Problem(String type, String title, int status, String detail, String instance, String code, String correlationId) { }
+    public record Problem(String type, String title, int status, String detail, String instance, String code, String correlationId,
+        Integer item, Integer line, String field, String hint, List<QuestionImportService.ImportDiagnostic> errors) { }
 }

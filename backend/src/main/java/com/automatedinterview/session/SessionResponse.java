@@ -14,4 +14,5 @@ public record SessionResponse(
     List<SkillClaim> jobSkills,
     List<SkillClaim> resumeSkills,
     List<String> matchedSkills,
-    List<String> missingSkills) { }
+    List<String> missingSkills,
+    List<String> unsupportedJobSkills) { }

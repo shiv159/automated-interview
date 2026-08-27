@@ -20,9 +20,11 @@ export class QuestionBankComponent implements OnInit {
   }
 
   get skillOptions(): string[] {
-    const skills = new Set((this.bank()?.questions ?? []).map(q => q.primarySkill ?? 'BEHAVIORAL'));
+    const skills = new Set(this.bank()?.skills?.map(skill => skill.id) ?? (this.bank()?.questions ?? []).map(q => q.primarySkill ?? 'BEHAVIORAL'));
     return ['ALL', ...Array.from(skills).sort()];
   }
+
+  skillDisplayNames(): Record<string, string> { return Object.fromEntries((this.bank()?.skills ?? []).map(skill => [skill.id, skill.displayName])); }
 
   get filteredQuestions(): QuestionSummary[] {
     const rows = this.bank()?.questions ?? [];
@@ -33,7 +35,7 @@ export class QuestionBankComponent implements OnInit {
       && (this.originFilter === 'ALL' || q.origin === this.originFilter));
   }
 
-  displaySkill(skill: string): string { return skill === 'ALL' ? 'All Skills' : skill === 'BEHAVIORAL' ? 'Behavioral' : skill.replaceAll('_', ' '); }
+  displaySkill(skill: string): string { return skill === 'ALL' ? 'All Skills' : skill === 'BEHAVIORAL' ? 'Behavioral' : this.skillDisplayNames()[skill] ?? skill.replaceAll('_', ' '); }
   formatTags(value: unknown): string { if (Array.isArray(value)) return value.join(', '); if (typeof value !== 'string') return ''; try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.join(', ') : value; } catch { return value; } }
 
   async importQuestions() {

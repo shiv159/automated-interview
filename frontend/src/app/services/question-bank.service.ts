@@ -8,7 +8,8 @@ export interface QuestionSummary {
   tags: string; rubric: string; idealAnswer: string | null; updatedAt: string;
 }
 export interface CoverageBucket { type: string; primarySkill: string | null; difficulty: string | null; status: string; count: number; }
-export interface QuestionBank { questions: QuestionSummary[]; total: number; activeCount: number; skillAreaCount: number; coverage: CoverageBucket[]; }
+export interface SkillOption { id: string; displayName: string; aliases: string[]; }
+export interface QuestionBank { questions: QuestionSummary[]; total: number; activeCount: number; skillAreaCount: number; coverage: CoverageBucket[]; skills?: SkillOption[]; }
 
 @Injectable({ providedIn: 'root' })
 export class QuestionBankService {

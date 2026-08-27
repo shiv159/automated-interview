@@ -43,7 +43,8 @@ public class SessionService {
             String job = DocumentNormalizer.normalize(extractor.extract(jobFile));
             String resume = DocumentNormalizer.normalize(extractor.extract(resumeFile));
             if (job.isBlank()) throw new SessionInputException("INVALID_DOCUMENT");
-            List<SkillClaim> jobClaims = analyzer.analyze("job description", job);
+            VertexSkillAnalyzer.AnalysisResult jobAnalysis = analyzer.analyzeResult("job description", job);
+            List<SkillClaim> jobClaims = jobAnalysis.claims();
             if (jobClaims.isEmpty()) throw new SessionInputException("NO_SUPPORTED_SKILLS");
             List<SkillClaim> resumeClaims = resume.isBlank() ? List.of() : analyzer.analyze("resume", resume);
             Set<String> jobSkills = ids(jobClaims);
@@ -62,14 +63,14 @@ public class SessionService {
             // that later snapshot/report reads will return from the persisted row.
             Instant persistedExpiresAt = expiresAt.truncatedTo(ChronoUnit.MICROS);
             jdbc.sql("""
-                INSERT INTO interview_session (id, token_hash, state, years_experience, difficulty, profile_match, expires_at, role_title)
-                VALUES (:id, :tokenHash, 'READY', :years, :difficulty, :profileMatch, :expiresAt, :roleTitle)
+                INSERT INTO interview_session (id, token_hash, state, years_experience, difficulty, profile_match, expires_at, role_title, unsupported_requirements)
+                VALUES (:id, :tokenHash, 'READY', :years, :difficulty, :profileMatch, :expiresAt, :roleTitle, CAST(:unsupported AS jsonb))
                 """).param("id", id).param("tokenHash", hash(token)).param("years", yearsExperience)
                 .param("difficulty", difficulty).param("profileMatch", profileMatch)
-                .param("expiresAt", java.sql.Timestamp.from(persistedExpiresAt)).param("roleTitle", normalizedRoleTitle).update();
+                .param("expiresAt", java.sql.Timestamp.from(persistedExpiresAt)).param("roleTitle", normalizedRoleTitle).param("unsupported", json(jobAnalysis.unsupportedRequirements())).update();
             saveClaims(id, "JOB", jobClaims, resumeSkills);
             saveClaims(id, "RESUME", resumeClaims, jobSkills);
-            return new CreatedSession(new SessionResponse(id, persistedExpiresAt, normalizedRoleTitle, difficulty, profileMatch, markMatches(jobClaims, resumeSkills), markMatches(resumeClaims, jobSkills), matched, missing), token);
+            return new CreatedSession(new SessionResponse(id, persistedExpiresAt, normalizedRoleTitle, difficulty, profileMatch, markMatches(jobClaims, resumeSkills), markMatches(resumeClaims, jobSkills), matched, missing, jobAnalysis.unsupportedRequirements()), token);
         } catch (SessionInputException | VertexSkillAnalyzer.SkillProviderException exception) {
             throw exception;
         } catch (IllegalArgumentException exception) {
@@ -83,9 +84,9 @@ public class SessionService {
 
     public SessionResponse snapshot(UUID id, String token) {
         if (token == null || token.isBlank()) throw new SessionInputException("INVALID_SESSION_TOKEN");
-        SessionRow row = jdbc.sql("SELECT id, state, difficulty, profile_match, expires_at, COALESCE(role_title, '') AS role_title FROM interview_session WHERE id = :id AND token_hash = :tokenHash")
+        SessionRow row = jdbc.sql("SELECT id, state, difficulty, profile_match, expires_at, COALESCE(role_title, '') AS role_title, unsupported_requirements FROM interview_session WHERE id = :id AND token_hash = :tokenHash")
             .param("id", id).param("tokenHash", hash(token)).query((rs, n) -> new SessionRow(
-                rs.getObject("id", UUID.class), rs.getString("difficulty"), rs.getDouble("profile_match"), rs.getTimestamp("expires_at").toInstant(), rs.getString("role_title"))).optional()
+                rs.getObject("id", UUID.class), rs.getString("difficulty"), rs.getDouble("profile_match"), rs.getTimestamp("expires_at").toInstant(), rs.getString("role_title"), rs.getString("unsupported_requirements"))).optional()
             .orElseThrow(() -> new SessionInputException("SESSION_NOT_FOUND"));
         if (!row.expiresAt().isAfter(Instant.now())) throw new SessionInputException("SESSION_EXPIRED");
         List<SkillClaim> job = claims(id, "JOB");
@@ -93,7 +94,7 @@ public class SessionService {
         Set<String> resumeIds = ids(resume);
         List<String> matched = job.stream().map(SkillClaim::skillId).filter(resumeIds::contains).distinct().toList();
         List<String> missing = job.stream().map(SkillClaim::skillId).filter(skill -> !resumeIds.contains(skill)).distinct().toList();
-        return new SessionResponse(id, row.expiresAt(), row.roleTitle(), row.difficulty(), row.profileMatch(), job, resume, matched, missing);
+        return new SessionResponse(id, row.expiresAt(), row.roleTitle(), row.difficulty(), row.profileMatch(), job, resume, matched, missing, parseJsonList(row.unsupportedRequirements()));
     }
 
     private List<SkillClaim> claims(UUID id, String documentType) {
@@ -137,7 +138,9 @@ public class SessionService {
     }
 
     public record CreatedSession(SessionResponse response, String token) { }
-    private record SessionRow(UUID id, String difficulty, double profileMatch, Instant expiresAt, String roleTitle) { }
+    private String json(List<String> values) { return "[" + values.stream().map(value -> "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"").reduce((a, b) -> a + "," + b).orElse("") + "]"; }
+    private List<String> parseJsonList(String value) { try { return value == null ? List.of() : new com.fasterxml.jackson.databind.ObjectMapper().readValue(value, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() { }); } catch (Exception exception) { return List.of(); } }
+    private record SessionRow(UUID id, String difficulty, double profileMatch, Instant expiresAt, String roleTitle, String unsupportedRequirements) { }
 
     private String normalizeRoleTitle(String value) {
         if (value == null) return "";

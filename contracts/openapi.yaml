@@ -58,7 +58,8 @@ paths:
         '201':
           description: Created new questions
           content: {application/json: {schema: {$ref: '#/components/schemas/QuestionImportResponse'}}}
-        '422': {description: Rejected}
+        '400': {description: Invalid file or item data, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '422': {description: Rejected with structured item diagnostics, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/sessions/{sessionId}/interview:
     post:
       parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
@@ -130,7 +131,7 @@ components:
       properties: {answer: {type: string, maxLength: 4000}}
     SessionResponse:
       type: object
-      required: [id, expiresAt, roleTitle, difficulty, profileMatch, jobSkills, resumeSkills, matchedSkills, missingSkills]
+      required: [id, expiresAt, roleTitle, difficulty, profileMatch, jobSkills, resumeSkills, matchedSkills, missingSkills, unsupportedJobSkills]
       properties:
         id: {type: string, format: uuid}
         expiresAt: {type: string, format: date-time}
@@ -141,6 +142,7 @@ components:
         resumeSkills: {type: array, items: {$ref: '#/components/schemas/SkillClaim'}}
         matchedSkills: {type: array, items: {type: string}}
         missingSkills: {type: array, items: {type: string}}
+        unsupportedJobSkills: {type: array, items: {type: string}}
     AnswerResponse:
       type: object
       required: [position, score, strengths, improvements, nextQuestion]
@@ -168,6 +170,24 @@ components:
         instance: {type: string}
         code: {type: string}
         correlationId: {type: string}
+        item: {type: integer, minimum: 1, nullable: true}
+        line: {type: integer, minimum: 1, nullable: true}
+        field: {type: string, nullable: true}
+        hint: {type: string, nullable: true}
+        errors:
+          type: array
+          items: {$ref: '#/components/schemas/ImportDiagnostic'}
+    ImportDiagnostic:
+      type: object
+      required: [code, status, message]
+      properties:
+        code: {type: string}
+        status: {type: integer}
+        item: {type: integer, minimum: 1, nullable: true}
+        line: {type: integer, minimum: 1, nullable: true}
+        field: {type: string, nullable: true}
+        message: {type: string}
+        hint: {type: string, nullable: true}
     QuestionImportItem:
       type: object
       required: [stem]
@@ -209,13 +229,21 @@ components:
         updatedAt: {type: string, format: date-time}
     QuestionBankResponse:
       type: object
-      required: [questions, total, activeCount, skillAreaCount, coverage]
+      required: [questions, total, activeCount, skillAreaCount, coverage, skills]
       properties:
         questions: {type: array, items: {$ref: '#/components/schemas/QuestionSummary'}}
         total: {type: integer}
         activeCount: {type: integer}
         skillAreaCount: {type: integer}
         coverage: {type: array, items: {type: object}}
+        skills: {type: array, items: {$ref: '#/components/schemas/SkillOption'}}
+    SkillOption:
+      type: object
+      required: [id, displayName, aliases]
+      properties:
+        id: {type: string}
+        displayName: {type: string}
+        aliases: {type: array, items: {type: string}}
     QuestionResponse:
       type: object
       required: [instanceId, position, totalQuestions, roleTitle, type, stem, guidance]
@@ -236,7 +264,7 @@ components:
       properties:
         sessionId: {type: string, format: uuid}
         roleTitle: {type: string}
-        evaluations: {type: array, items: {type: object}}
+        evaluations: {type: array, items: {$ref: '#/components/schemas/EvaluationSummary'}}
         profileMatch: {type: number, description: Aggregate score from 0 to 100}
         technicalScore: {type: number, description: Aggregate score from 0 to 100}
         behavioralScore: {type: number, description: Aggregate score from 0 to 100}
@@ -244,3 +272,16 @@ components:
         readinessScore: {type: number, description: Aggregate score from 0 to 100}
         readinessLabel: {type: string}
         expiresAt: {type: string, format: date-time}
+    EvaluationSummary:
+      type: object
+      required: [position, type, stem, criteria, criteriaScores, score, strengths, improvements]
+      properties:
+        position: {type: integer}
+        type: {type: string}
+        primarySkill: {type: [string, 'null']}
+        stem: {type: string}
+        criteria: {type: string}
+        criteriaScores: {type: array, items: {type: object, required: [criterion, score], properties: {criterion: {type: string}, score: {type: number, minimum: 0, maximum: 10}, feedback: {type: string}}}}
+        score: {type: number, minimum: 0, maximum: 10}
+        strengths: {type: string}
+        improvements: {type: string}

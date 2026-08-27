@@ -10,6 +10,7 @@ export interface Session {
   difficulty: string;
   matchedSkills: string[];
   missingSkills: string[];
+  unsupportedJobSkills: string[];
   jobSkills: SkillClaim[];
   resumeSkills: SkillClaim[];
 }
@@ -38,7 +39,10 @@ export interface Evaluation {
   score: number;
   strengths: string | string[];
   improvements: string | string[];
+  criteriaScores?: CriterionScore[];
 }
+
+export interface CriterionScore { criterion: string; score: number; feedback?: string; }
 
 export interface Report {
   sessionId: string;
@@ -51,6 +55,11 @@ export interface Report {
   interviewScore: number;
   expiresAt: string;
   evaluations: Evaluation[];
+  jobSkills?: SkillClaim[];
+  resumeSkills?: SkillClaim[];
+  matchedSkills?: string[];
+  missingSkills?: string[];
+  unsupportedJobSkills?: string[];
 }
 
 @Injectable({ providedIn: 'root' })

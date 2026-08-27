@@ -23,8 +23,22 @@ export class ApiErrorService {
       QUESTION_FIELD_CONFLICT: 'Behavioral questions cannot include technical skill or difficulty metadata.',
       QUESTION_ENRICHMENT_UNAVAILABLE: 'Question enrichment is temporarily unavailable.',
       SEED_QUESTION_IMMUTABLE: 'Seed questions cannot be changed.',
-      VECTOR_SYNC_UNAVAILABLE: 'The question was saved but is not searchable yet. Try again later.'
+      VECTOR_SYNC_UNAVAILABLE: 'The question was saved but is not searchable yet. Try again later.',
+      ATTESTATION_REQUIRED: 'Confirm that both documents are synthetic or non-confidential, then try again.',
+      NO_SUPPORTED_SKILLS: 'No supported skills were found. Add recognizable technical requirements or review the supported skills list.',
+      INVALID_ANSWER: 'Write a non-empty answer under 4,000 characters, then try again.',
+      AI_PROVIDER_UNAVAILABLE: 'AI analysis is temporarily unavailable. Wait a moment and retry; your uploaded files are still selected.',
+      SKILL_ANALYSIS_UNCERTAIN: 'The skill analysis was uncertain. Review the documents for clear requirements and retry.',
+      SKILL_ANALYSIS_INVALID: 'The skill analysis response was invalid. Retry the analysis or use clearer document text.',
+      SKILL_EVIDENCE_INVALID: 'Some skill evidence could not be verified. Review the source document and retry.',
+      REPORT_NOT_READY: 'Finish all interview questions before opening the coaching report.'
     };
-    return messages[code] ?? error?.error?.detail ?? error?.message ?? fallback;
+    const mapped = messages[code];
+    const diagnostics = Array.isArray(error?.error?.errors) ? error.error.errors.slice(0, 3).map((item: any) => {
+      const location = item.line ? `line ${item.line}` : item.item ? `item ${item.item}` : 'item';
+      return `${location}${item.field ? `/${item.field}` : ''}: ${item.hint || item.message || item.code}`;
+    }).join(' ') : '';
+    const hint = error?.error?.hint ? ` ${error.error.hint}` : '';
+    return mapped ? `${mapped}${diagnostics ? ` ${diagnostics}` : hint}` : error?.error?.detail ?? error?.message ?? fallback;
   }
 }

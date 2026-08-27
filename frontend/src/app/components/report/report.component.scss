@@ -1,1 +1,9 @@
 :host { display: block; }
+
+@media print {
+  .topbar, .actions, .status, .disclaimer, .report-actions { display: none !important; }
+  .shell, .page, .report-page, .panel { max-width: none; margin: 0; padding: 0; }
+  .score-card, .eval-row { break-inside: avoid; }
+  .evaluation-detail { display: block !important; }
+  body { background: white; color: black; }
+}

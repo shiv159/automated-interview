@@ -1,9 +1,11 @@
 package com.automatedinterview.interview;
 
 import com.automatedinterview.session.SessionService;
+import com.automatedinterview.analysis.SkillClaim;
 import com.automatedinterview.ai.VertexAnswerEvaluator;
 import com.automatedinterview.ai.QuestionRetrievalService;
 import com.automatedinterview.document.DocumentNormalizer;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class InterviewService {
+    private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern WORDS = Pattern.compile("[^\\p{L}\\p{Nd}]+");
     private final JdbcClient jdbc;
     private final VertexAnswerEvaluator vertexEvaluator;
@@ -161,7 +164,7 @@ public class InterviewService {
             try {
                 String context = retrieval.context(question.stem(), question.sourceQuestionId());
                 VertexAnswerEvaluator.Result result = vertexEvaluator.evaluate(question.stem(), question.rubric(), question.idealAnswer(), normalized, context);
-                evaluation = new Evaluation(result.score(), result.strengths(), result.improvements(), "[\"score\"]", json(result.strengths()), json(result.improvements()));
+                evaluation = new Evaluation(result.score(), result.strengths(), result.improvements(), criteriaJson(result.criteriaScores()), json(result.strengths()), json(result.improvements()));
                 adapter = "vertex";
                 model = vertexEvaluator.model();
             } catch (VertexAnswerEvaluator.ProviderUnavailable exception) {
@@ -207,22 +210,27 @@ public class InterviewService {
         SessionRow session = session(sessionId, token);
         if (!session.state().equals("REPORT_READY")) throw new InterviewException("REPORT_NOT_READY", 409);
         List<EvaluatedQuestion> evaluations = jdbc.sql("""
-            SELECT sq.position, sq.type, sq.primary_skill, sq.stem, sq.criteria, e.score, e.strengths, e.improvements
+            SELECT sq.position, sq.type, sq.primary_skill, sq.stem, sq.criteria, e.criteria_scores, e.score, e.strengths, e.improvements
             FROM session_question sq JOIN evaluation e ON e.session_question_id = sq.id
             WHERE sq.session_id = :sessionId ORDER BY sq.position
-            """).param("sessionId", sessionId).query((rs, row) -> new EvaluatedQuestion(rs.getInt("position"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("stem"), rs.getString("criteria"), rs.getDouble("score"), rs.getString("strengths"), rs.getString("improvements"))).list();
+            """).param("sessionId", sessionId).query((rs, row) -> new EvaluatedQuestion(rs.getInt("position"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("stem"), rs.getString("criteria"), parseCriteriaScores(rs.getString("criteria_scores")), rs.getDouble("score"), rs.getString("strengths"), rs.getString("improvements"))).list();
         double technical = evaluations.stream().filter(item -> item.type().equals("TECHNICAL")).mapToDouble(EvaluatedQuestion::score).average().orElse(0) * 10;
         double behavioral = evaluations.stream().filter(item -> item.type().equals("BEHAVIORAL")).mapToDouble(EvaluatedQuestion::score).findFirst().orElse(0) * 10;
         double interview = technical * .8 + behavioral * .2;
         double readiness = Math.round((session.profileMatch() * .3 + interview * .7) * 10) / 10.0;
         String label = readiness >= 80 ? "Ready" : readiness >= 65 ? "Nearly Ready" : readiness >= 50 ? "Developing" : "Significant Gaps";
-        return new ReportResponse(sessionId, session.roleTitle(), evaluations, session.profileMatch(), technical, behavioral, interview, readiness, label, session.expiresAt());
+        List<SkillClaim> jobSkills = claims(sessionId, "JOB");
+        List<SkillClaim> resumeSkills = claims(sessionId, "RESUME");
+        Set<String> resumeIds = resumeSkills.stream().map(SkillClaim::skillId).collect(java.util.stream.Collectors.toSet());
+        List<String> matchedSkills = jobSkills.stream().map(SkillClaim::skillId).filter(resumeIds::contains).distinct().toList();
+        List<String> missingSkills = jobSkills.stream().map(SkillClaim::skillId).filter(skill -> !resumeIds.contains(skill)).distinct().toList();
+        return new ReportResponse(sessionId, session.roleTitle(), evaluations, session.profileMatch(), technical, behavioral, interview, readiness, label, session.expiresAt(), jobSkills, resumeSkills, matchedSkills, missingSkills, parseJsonList(session.unsupportedRequirements()));
     }
 
     private SessionRow session(UUID id, String token) {
         if (token == null || token.isBlank()) throw new InterviewException("INVALID_SESSION_TOKEN", 401);
         return jdbc.sql("""
-            SELECT s.id, s.state, s.difficulty, s.profile_match, s.expires_at,
+            SELECT s.id, s.state, s.difficulty, s.profile_match, s.expires_at, s.unsupported_requirements,
                    COALESCE(s.role_title, '') AS role_title,
                    (SELECT count(*) FROM session_question q WHERE q.session_id = s.id) AS total_questions
             FROM interview_session s
@@ -231,7 +239,7 @@ public class InterviewService {
             .param("id", id).param("tokenHash", SessionService.hash(token)).query((rs, row) -> new SessionRow(
                 rs.getObject("id", UUID.class), rs.getString("state"), rs.getString("difficulty"),
                 rs.getDouble("profile_match"), rs.getTimestamp("expires_at").toInstant(),
-                rs.getString("role_title"), rs.getInt("total_questions"))).optional()
+                rs.getString("role_title"), rs.getInt("total_questions"), rs.getString("unsupported_requirements"))).optional()
             .filter(item -> item.expiresAt().isAfter(Instant.now())).orElseThrow(() -> new InterviewException("SESSION_EXPIRED", 410));
     }
 
@@ -256,6 +264,10 @@ public class InterviewService {
     }
 
     private String json(List<String> values) { return "[" + values.stream().map(value -> "\"" + value.replace("\"", "\\\"") + "\"").reduce((a, b) -> a + "," + b).orElse("") + "]"; }
+    private String criteriaJson(List<com.automatedinterview.ai.VertexAnswerEvaluator.CriterionScore> values) { try { return JSON.writeValueAsString(values); } catch (Exception exception) { throw new IllegalStateException("Unable to serialize criterion scores", exception); } }
+    private List<CriterionScore> parseCriteriaScores(String value) { try { return value == null ? List.of() : JSON.readValue(value, JSON.getTypeFactory().constructCollectionType(List.class, CriterionScore.class)); } catch (Exception exception) { return List.of(); } }
+    private List<SkillClaim> claims(UUID sessionId, String documentType) { return jdbc.sql("SELECT skill_id, importance, evidence, matched FROM session_skill WHERE session_id = :id AND document_type = :type ORDER BY skill_id").param("id", sessionId).param("type", documentType).query((rs, row) -> new SkillClaim(rs.getString("skill_id"), rs.getString("importance"), rs.getString("evidence"), rs.getBoolean("matched"))).list(); }
+    private List<String> parseJsonList(String value) { try { return value == null ? List.of() : JSON.readValue(value, JSON.getTypeFactory().constructCollectionType(List.class, String.class)); } catch (Exception exception) { return List.of(); } }
 
     private String guidance(QuestionRow question) {
         if ("BEHAVIORAL".equals(question.type())) return "Use a specific situation, your task, the actions you took, the result, and what you learned.";
@@ -263,13 +275,14 @@ public class InterviewService {
         return "Explain the constraints, tradeoffs, implementation choices, and how you would validate the result for " + skill + ".";
     }
 
-    private record SessionRow(UUID id, String state, String difficulty, double profileMatch, Instant expiresAt, String roleTitle, int totalQuestions) { }
+    private record SessionRow(UUID id, String state, String difficulty, double profileMatch, Instant expiresAt, String roleTitle, int totalQuestions, String unsupportedRequirements) { }
     private record TargetSkill(String skillId, String displayName, String importance, boolean matched, String jobEvidence, String resumeEvidence) { }
     private record QuestionRow(UUID id, UUID sourceQuestionId, String stem, String type, String skill, String difficulty, String rubric, String idealAnswer, String hash, int position) { }
     private record Evaluation(double score, List<String> strengths, List<String> improvements, String criteriaJson, String strengthsJson, String improvementsJson) { }
     public record QuestionResponse(UUID instanceId, int position, int totalQuestions, String roleTitle, String type, String primarySkill, String difficulty, String stem, String criteria, String guidance) { }
     public record AnswerResponse(int position, double score, List<String> strengths, List<String> improvements, QuestionResponse nextQuestion) { }
-    public record EvaluatedQuestion(int position, String type, String primarySkill, String stem, String criteria, double score, String strengths, String improvements) { }
-    public record ReportResponse(UUID sessionId, String roleTitle, List<EvaluatedQuestion> evaluations, double profileMatch, double technicalScore, double behavioralScore, double interviewScore, double readinessScore, String readinessLabel, Instant expiresAt) { }
+    public record CriterionScore(String criterion, double score, String feedback) { }
+    public record EvaluatedQuestion(int position, String type, String primarySkill, String stem, String criteria, List<CriterionScore> criteriaScores, double score, String strengths, String improvements) { }
+    public record ReportResponse(UUID sessionId, String roleTitle, List<EvaluatedQuestion> evaluations, double profileMatch, double technicalScore, double behavioralScore, double interviewScore, double readinessScore, String readinessLabel, Instant expiresAt, List<SkillClaim> jobSkills, List<SkillClaim> resumeSkills, List<String> matchedSkills, List<String> missingSkills, List<String> unsupportedJobSkills) { }
     public static class InterviewException extends RuntimeException { private final String code; private final int status; public InterviewException(String code, int status) { this.code = code; this.status = status; } public String code() { return code; } public int status() { return status; } }
 }

@@ -1,0 +1,6 @@
+[
+  {"id":"CORE_JAVA","displayName":"Core Java","aliases":["core java","java se","jdk","jvm","java"],"active":true,"version":"1","source":"seed"},
+  {"id":"SPRING_BOOT","displayName":"Spring Boot","aliases":["spring boot","spring framework","spring mvc","spring data","jpa","hibernate","spring"],"active":true,"version":"1","source":"seed"},
+  {"id":"SQL_RELATIONAL","displayName":"SQL / Relational Databases","aliases":["relational databases","relational database","rdbms","postgresql","postgres","mysql","oracle database","sql server","sql"],"active":true,"version":"1","source":"seed"},
+  {"id":"ANGULAR","displayName":"Angular","aliases":["angular framework","angularjs","angular"],"active":true,"version":"1","source":"seed"}
+]

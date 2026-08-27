@@ -29,7 +29,7 @@ public class QuestionSeedLoader implements CommandLineRunner {
     @Override
     public void run(String... args) {
         List<String> difficulties = List.of("EASY", "MEDIUM", "HARD");
-        for (SkillCatalog.Skill skill : SkillCatalog.SKILLS) {
+        for (SkillCatalog.Skill skill : SkillCatalog.activeSkills()) {
             for (String difficulty : difficulties) {
                 for (int index = 1; index <= 2; index++) {
                     String stem = "Explain a " + difficulty.toLowerCase() + " " + skill.displayName()
