@@ -19,6 +19,7 @@ public class AiPromptTemplates {
     }
     public String enrichment(String stem, String type, String skill) { return render(enrichment, Map.of("stem", safe(stem), "deterministicType", safe(type), "deterministicSkill", skill == null ? "null" : skill)); }
     public String evaluation(String stem, String criteria, String idealAnswer, String answer) { return render(evaluation, Map.of("stem", safe(stem), "criteria", safe(criteria), "idealAnswer", safe(idealAnswer), "answer", safe(answer))); }
+    public String evaluation(String stem, String criteria, String idealAnswer, String answer, String context) { return render(evaluation, Map.of("stem", safe(stem), "criteria", safe(criteria), "idealAnswer", safe(idealAnswer), "answer", safe(answer), "context", safe(context))); }
     public String skillAnalysis(String documentType, String skills, String document) { return render(skillAnalysis, Map.of("documentType", safe(documentType), "skills", safe(skills), "document", safe(document))); }
     private static String render(Resource resource, Map<String, String> values) {
         try {

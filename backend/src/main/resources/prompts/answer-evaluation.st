@@ -9,3 +9,5 @@ Ideal answer:
 {idealAnswer}
 Candidate answer:
 {answer}
+Retrieved reference context:
+{context}

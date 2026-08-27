@@ -1,7 +1,6 @@
 package com.automatedinterview.questionbank;
 
 import com.automatedinterview.catalog.SkillCatalog;
-import com.automatedinterview.ai.VectorSyncService;
 import com.automatedinterview.ai.VertexQuestionEnricher;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,12 +30,11 @@ public class QuestionImportService {
     private static final ObjectMapper JSON = new ObjectMapper();
     private final JdbcClient jdbc;
     private final VertexQuestionEnricher enricher;
-    private final VectorSyncService vectorSync;
     private final String enrichmentProfile;
 
-    public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, VectorSyncService vectorSync,
+    public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher,
         @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile) {
-        this.jdbc = jdbc; this.enricher = enricher; this.vectorSync = vectorSync;
+        this.jdbc = jdbc; this.enricher = enricher;
         this.enrichmentProfile = enrichmentProfile;
     }
 
@@ -67,18 +65,11 @@ public class QuestionImportService {
                 VALUES (:id, :hash, :stem, :type, :skill, :difficulty, CAST(:tags AS jsonb), CAST(:rubric AS jsonb), :ideal, 'OWNER_IMPORT', 'ACTIVE', :hash, '{"source":"owner-import","profile":"ai"}'::jsonb)
                 ON CONFLICT (content_hash) DO UPDATE SET stem = EXCLUDED.stem, type = EXCLUDED.type, primary_skill = EXCLUDED.primary_skill,
                     difficulty = EXCLUDED.difficulty, tags = EXCLUDED.tags, rubric = EXCLUDED.rubric, ideal_answer = EXCLUDED.ideal_answer,
-                    origin = 'OWNER_IMPORT', status = 'ACTIVE', updated_at = now(), enrichment_provenance = EXCLUDED.enrichment_provenance
+                    origin = 'OWNER_IMPORT', status = 'ACTIVE', updated_at = now(), enrichment_provenance = EXCLUDED.enrichment_provenance,
+                    source_hash = EXCLUDED.source_hash, indexing_status = 'PENDING', indexing_attempts = 0,
+                    indexing_next_attempt_at = now(), indexing_last_error = NULL, indexed_source_hash = NULL, indexed_at = NULL
                 """).param("id", id).param("hash", hash).param("stem", stem).param("type", classification.type()).param("skill", classification.skill())
                 .param("difficulty", classification.difficulty()).param("tags", tags).param("rubric", rubric).param("ideal", ideal).update();
-            // 2. Sync the vector projection.
-            try {
-                vectorSync.upsert(id, stem, classification.type(),
-                        classification.skill() == null ? "" : classification.skill(),
-                        classification.difficulty() == null ? "" : classification.difficulty(),
-                        "ACTIVE");
-            } catch (VectorSyncService.VectorSyncException e) {
-                throw new ImportException("VECTOR_SYNC_UNAVAILABLE", 503, e);
-            }
             summaries.add(jdbc.sql("""
                 SELECT id, stem, origin, status, type, primary_skill, difficulty, tags, rubric, ideal_answer, updated_at
                 FROM question WHERE id = :id
@@ -97,22 +88,14 @@ public class QuestionImportService {
         int changed = jdbc.sql("UPDATE question SET status = :status, updated_at = now() WHERE id = :id AND origin = 'OWNER_IMPORT'")
             .param("status", status).param("id", id).update();
         if (changed == 0) throw new ImportException("SEED_QUESTION_IMMUTABLE", 409);
-        // Sync the vector projection: delete on deactivation, re-add on reactivation.
+        // Remove inactive vectors immediately; reactivation is queued for the worker.
         if (status.equals("INACTIVE")) {
-            vectorSync.delete(id);
+            jdbc.sql("UPDATE question SET indexing_status = 'FAILED', indexing_next_attempt_at = NULL, indexing_last_error = 'Question deactivated' WHERE id = :id")
+                .param("id", id).update();
+            jdbc.sql("DELETE FROM vector_store WHERE id = :id").param("id", id).update();
         } else {
-            // Re-fetch the domain row to rebuild the vector with current content.
-            jdbc.sql("SELECT id, stem, type, COALESCE(primary_skill,'') AS primary_skill, COALESCE(difficulty,'') AS difficulty, status FROM question WHERE id = :id")
-                .param("id", id).query((rs, row) -> {
-                    try {
-                        vectorSync.upsert(
-                            rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("type"),
-                            rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("status"));
-                    } catch (VectorSyncService.VectorSyncException e) {
-                        throw new ImportException("VECTOR_SYNC_UNAVAILABLE", 503, e);
-                    }
-                    return null;
-                }).list();
+            jdbc.sql("UPDATE question SET indexing_status = 'PENDING', indexing_next_attempt_at = now(), indexing_last_error = NULL WHERE id = :id")
+                .param("id", id).update();
         }
     }
 

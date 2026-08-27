@@ -1,6 +1,5 @@
 package com.automatedinterview.questionbank;
 
-import com.automatedinterview.ai.VectorSyncService;
 import com.automatedinterview.catalog.SkillCatalog;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -22,11 +21,9 @@ public class QuestionSeedLoader implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(QuestionSeedLoader.class);
 
     private final JdbcClient jdbc;
-    private final VectorSyncService vectorSync;
 
-    public QuestionSeedLoader(JdbcClient jdbc, VectorSyncService vectorSync) {
+    public QuestionSeedLoader(JdbcClient jdbc) {
         this.jdbc = jdbc;
-        this.vectorSync = vectorSync;
     }
 
     @Override
@@ -72,20 +69,7 @@ public class QuestionSeedLoader implements CommandLineRunner {
             .param("rubric", criteria).param("ideal", ideal).param("origin", origin)
             .update();
 
-        // 2. Vector sync — runs after the domain row is committed.
-        //    VectorSyncService.upsert() performs delete-then-add.
-        //    On failure, VectorReconciliationJob will repair the gap on the next startup.
-        UUID actualId = jdbc.sql("SELECT id FROM question WHERE content_hash = :hash")
-                .param("hash", hash).query(UUID.class).single();
-        try {
-            vectorSync.upsert(actualId, stem, type,
-                    skill == null ? "" : skill,
-                    difficulty == null ? "" : difficulty,
-                    "ACTIVE");
-        } catch (Exception e) {
-            log.error("QuestionSeedLoader: vector sync failed for question {}. " +
-                    "VectorReconciliationJob will repair on next startup.", actualId, e);
-        }
+        // Vector indexing is queued through question.indexing_status and handled asynchronously.
     }
 
     private String hash(String value) {

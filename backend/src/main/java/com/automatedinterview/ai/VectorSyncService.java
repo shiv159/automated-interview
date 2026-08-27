@@ -7,6 +7,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,9 @@ public class VectorSyncService {
 
     private final VectorStore vectorStore;
     private final JdbcClient jdbc;
+    @Value("${VERTEX_EMBEDDING_MODEL:text-embedding-005}") private String embeddingModel;
+    @Value("${APP_EMBEDDING_PROFILE:local}") private String embeddingProfile;
+    @Value("${app.ai.embedding-dimensions:768}") private int embeddingDimensions;
 
     public VectorSyncService(VectorStore vectorStore, JdbcClient jdbc) {
         this.vectorStore = vectorStore;
@@ -92,23 +96,19 @@ public class VectorSyncService {
      * and re-embeds them. Called by {@link VectorReconciliationJob} on startup.
      */
     public void reconcileMissingVectors() {
-        List<MissingVector> missing = jdbc.sql("""
-            SELECT q.id, q.stem, q.type,
-                   COALESCE(q.primary_skill, '') AS primary_skill,
-                   COALESCE(q.difficulty, '')    AS difficulty,
-                   q.status
-            FROM question q
+        List<UUID> missing = jdbc.sql("""
+            SELECT q.id FROM question q
             LEFT JOIN vector_store vs ON vs.id = q.id
             WHERE q.status = 'ACTIVE'
-              AND (vs.id IS NULL
+              AND (q.indexing_status <> 'INDEXED'
+                   OR q.indexed_source_hash IS DISTINCT FROM q.source_hash
+                   OR vs.id IS NULL
                    OR vs.content IS DISTINCT FROM q.stem
                    OR vs.metadata->>'type' IS DISTINCT FROM q.type
                    OR vs.metadata->>'primary_skill' IS DISTINCT FROM COALESCE(q.primary_skill, '')
                    OR vs.metadata->>'difficulty' IS DISTINCT FROM COALESCE(q.difficulty, '')
                    OR vs.metadata->>'status' IS DISTINCT FROM q.status)
-            """).query((rs, row) -> new MissingVector(
-                rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("type"),
-                rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("status"))).list();
+            """).query(UUID.class).list();
 
         if (missing.isEmpty()) {
             log.info("VectorReconciliation: no missing vectors found.");
@@ -116,18 +116,10 @@ public class VectorSyncService {
         }
         log.info("VectorReconciliation: rebuilding {} missing vector(s).", missing.size());
 
-        for (MissingVector row : missing) {
-            try {
-                upsert(row.id(), row.stem(), row.type(), row.primarySkill(), row.difficulty(), row.status());
-            } catch (Exception e) {
-                log.error("VectorReconciliation: failed to rebuild vector for question {}. Skipping.", row.id(), e);
-            }
-        }
+        jdbc.sql("UPDATE question SET indexing_status = 'PENDING', indexing_next_attempt_at = now(), indexing_last_error = NULL WHERE id IN (:ids)")
+                .param("ids", missing).update();
         log.info("VectorReconciliation: processed {} vector(s).", missing.size());
     }
-
-    private record MissingVector(UUID id, String stem, String type, String primarySkill,
-                                 String difficulty, String status) { }
 
     private Document buildDocument(UUID id, String stem, String type,
                                    String primarySkill, String difficulty, String status) {
@@ -137,6 +129,10 @@ public class VectorSyncService {
         metadata.put("primary_skill", primarySkill == null ? "" : primarySkill);
         metadata.put("difficulty",    difficulty == null ? "" : difficulty);
         metadata.put("status",        status);
+        metadata.put("indexing_status", "INDEXED");
+        metadata.put("embedding_model", embeddingModel);
+        metadata.put("embedding_profile", embeddingProfile);
+        metadata.put("embedding_dimensions", embeddingDimensions);
         return new Document(id.toString(), stem, metadata);
     }
 

@@ -2,6 +2,7 @@ package com.automatedinterview.interview;
 
 import com.automatedinterview.session.SessionService;
 import com.automatedinterview.ai.VertexAnswerEvaluator;
+import com.automatedinterview.ai.QuestionRetrievalService;
 import com.automatedinterview.document.DocumentNormalizer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -13,8 +14,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,10 +25,12 @@ public class InterviewService {
     private final VertexAnswerEvaluator vertexEvaluator;
     private final String evaluationProfile;
     private final VectorStore vectorStore;
+    private final QuestionRetrievalService retrieval;
 
     public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator, VectorStore vectorStore,
+        QuestionRetrievalService retrieval,
         @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile) {
-        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.vectorStore = vectorStore;
+        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.vectorStore = vectorStore; this.retrieval = retrieval;
         this.evaluationProfile = evaluationProfile;
     }
 
@@ -91,43 +92,19 @@ public class InterviewService {
      * Excludes already-selected question IDs.
      */
     private QuestionRow searchTechnical(String queryText, String skillId, String difficulty, Set<UUID> excludeIds) {
-        var b = new FilterExpressionBuilder();
-        var filter = b.and(
-            b.and(
-                b.eq("type", "TECHNICAL"),
-                b.eq("primary_skill", skillId)
-            ),
-            b.and(
-                b.eq("difficulty", difficulty),
-                b.eq("status", "ACTIVE")
-            )
-        );
-        SearchRequest request = SearchRequest.builder()
-                .query(queryText)
-                .topK(excludeIds.isEmpty() ? 1 : excludeIds.size() + 1)
-                .filterExpression(filter.build())
-                .build();
-        return vectorStore.similaritySearch(request).stream()
-                .map(doc -> mapToQuestionRow(doc, skillId, difficulty))
-                .filter(q -> q != null && !excludeIds.contains(q.id()))
-                .findFirst()
-                .orElse(null);
+        UUID id = retrieval.select(queryText, "TECHNICAL", skillId, difficulty, List.copyOf(excludeIds));
+        return id == null ? null : loadQuestion(id, skillId, difficulty);
     }
 
     /** Searches the vector store for the best-matching ACTIVE BEHAVIORAL question. */
     private QuestionRow searchBehavioral() {
-        var b = new FilterExpressionBuilder();
-        var filter = b.and(b.eq("type", "BEHAVIORAL"), b.eq("status", "ACTIVE"));
-        SearchRequest request = SearchRequest.builder()
-                .query("behavioral communication teamwork problem solving reflection")
-                .topK(1)
-                .filterExpression(filter.build())
-                .build();
-        return vectorStore.similaritySearch(request).stream()
-                .map(doc -> mapToQuestionRow(doc, null, null))
-                .filter(q -> q != null)
-                .findFirst()
-                .orElse(null);
+        UUID id = retrieval.select("behavioral communication teamwork problem solving reflection", "BEHAVIORAL", null, null, List.of());
+        return id == null ? null : loadQuestion(id, null, null);
+    }
+
+    private QuestionRow loadQuestion(UUID id, String skill, String difficulty) {
+        return jdbc.sql("SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash FROM question WHERE id = :id AND status = 'ACTIVE' AND (:skill::text IS NULL OR primary_skill = :skill) AND (:difficulty::text IS NULL OR difficulty = :difficulty)")
+            .param("id", id).param("skill", skill).param("difficulty", difficulty).query(this::question).optional().orElse(null);
     }
 
     /**
@@ -174,7 +151,7 @@ public class InterviewService {
         QuestionRow question = jdbc.sql("""
             UPDATE session_question SET status = 'EVALUATING'
             WHERE id = :instanceId AND session_id = :sessionId AND status = 'ACTIVE'
-            RETURNING id, position, type, primary_skill, difficulty, stem, criteria, ideal_answer, source_hash
+            RETURNING id, question_id, position, type, primary_skill, difficulty, stem, criteria, ideal_answer, source_hash
             """).param("instanceId", instanceId).param("sessionId", sessionId).query(this::sessionQuestion).optional()
             .orElseThrow(() -> answerConflict(sessionId, instanceId));
         Evaluation evaluation;
@@ -182,7 +159,8 @@ public class InterviewService {
         String model;
         if (evaluationProfile.equals("ai")) {
             try {
-                VertexAnswerEvaluator.Result result = vertexEvaluator.evaluate(question.stem(), question.rubric(), question.idealAnswer(), normalized);
+                String context = retrieval.context(question.stem(), question.sourceQuestionId());
+                VertexAnswerEvaluator.Result result = vertexEvaluator.evaluate(question.stem(), question.rubric(), question.idealAnswer(), normalized, context);
                 evaluation = new Evaluation(result.score(), result.strengths(), result.improvements(), "[\"score\"]", json(result.strengths()), json(result.improvements()));
                 adapter = "vertex";
                 model = vertexEvaluator.model();
@@ -217,7 +195,7 @@ public class InterviewService {
     public QuestionResponse current(UUID sessionId, String token) {
         SessionRow session = session(sessionId, token);
         return jdbc.sql("""
-            SELECT id, position, type, primary_skill, difficulty, stem, criteria, ideal_answer, source_hash
+            SELECT id, question_id, position, type, primary_skill, difficulty, stem, criteria, ideal_answer, source_hash
             FROM session_question WHERE session_id = :sessionId AND status = 'ACTIVE'
             ORDER BY position LIMIT 1
             """).param("sessionId", sessionId).query(this::sessionQuestion).optional()
@@ -258,11 +236,12 @@ public class InterviewService {
     }
 
     private QuestionRow question(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
-        return new QuestionRow(rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("rubric"), rs.getString("ideal_answer"), rs.getString("content_hash"), 0);
+        UUID id = rs.getObject("id", UUID.class);
+        return new QuestionRow(id, id, rs.getString("stem"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("rubric"), rs.getString("ideal_answer"), rs.getString("content_hash"), 0);
     }
 
     private QuestionRow sessionQuestion(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
-        return new QuestionRow(rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("criteria"), rs.getString("ideal_answer"), rs.getString("source_hash"), rs.getInt("position"));
+        return new QuestionRow(rs.getObject("id", UUID.class), rs.getObject("question_id", UUID.class), rs.getString("stem"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("criteria"), rs.getString("ideal_answer"), rs.getString("source_hash"), rs.getInt("position"));
     }
 
     private String normalizeAnswer(String value) {
@@ -286,7 +265,7 @@ public class InterviewService {
 
     private record SessionRow(UUID id, String state, String difficulty, double profileMatch, Instant expiresAt, String roleTitle, int totalQuestions) { }
     private record TargetSkill(String skillId, String displayName, String importance, boolean matched, String jobEvidence, String resumeEvidence) { }
-    private record QuestionRow(UUID id, String stem, String type, String skill, String difficulty, String rubric, String idealAnswer, String hash, int position) { }
+    private record QuestionRow(UUID id, UUID sourceQuestionId, String stem, String type, String skill, String difficulty, String rubric, String idealAnswer, String hash, int position) { }
     private record Evaluation(double score, List<String> strengths, List<String> improvements, String criteriaJson, String strengthsJson, String improvementsJson) { }
     public record QuestionResponse(UUID instanceId, int position, int totalQuestions, String roleTitle, String type, String primarySkill, String difficulty, String stem, String criteria, String guidance) { }
     public record AnswerResponse(int position, double score, List<String> strengths, List<String> improvements, QuestionResponse nextQuestion) { }
