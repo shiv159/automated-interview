@@ -48,6 +48,14 @@ export class QuestionBankComponent implements OnInit {
     finally { this.busy.set(false); }
   }
 
+  async retryAnalysis() {
+    if (!this.ownerFile) return;
+    this.busy.set(true); this.message.set('');
+    try { const payload = await this.questionBankService.analyzeQuestions(this.ownerFile); this.draft.set(payload.questions); this.suggestions.set(payload.newSkills.map(skill => ({ ...skill, approved: true }))); this.message.set('Analysis retried. Review the results before importing.'); }
+    catch (e: any) { this.message.set(this.apiErrors.message(e, 'Analysis retry failed.')); }
+    finally { this.busy.set(false); }
+  }
+
   async commitDraft() {
     const questions = this.draft();
     if (!questions.length) return;

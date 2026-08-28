@@ -1,0 +1,9 @@
+How do SQL indexes improve query performance, and what tradeoffs do they introduce?
+
+How would you design a resilient Spring Boot REST API backed by PostgreSQL and Docker?
+
+Tell me about a time you improved reliability in a production service and what you learned.
+
+Explain how Angular communicates with a Spring Boot backend and how you would secure the API.
+
+[INVALID TEST ROW: missing question text]

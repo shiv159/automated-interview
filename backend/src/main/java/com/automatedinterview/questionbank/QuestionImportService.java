@@ -111,7 +111,7 @@ public class QuestionImportService {
                 secondary.stream().filter(skill -> !known.contains(skill)).forEach(skill -> suggestion(suggestions, skill, questionIndex));
                 questions.add(new AnalysisQuestion(item.stem(), value.type(), primary, secondary, value.difficulty(), value.tags(), value.idealAnswer(), "VALID", null));
             } catch (VertexQuestionEnricher.ProviderUnavailable exception) {
-                questions.add(new AnalysisQuestion(item.stem(), null, null, List.of(), null, List.of(), null, "INVALID", "QUESTION_ANALYSIS_UNAVAILABLE"));
+                questions.add(new AnalysisQuestion(item.stem(), null, null, List.of(), null, List.of(), null, "RETRYABLE", "QUESTION_ANALYSIS_UNAVAILABLE"));
             }
         }
         return new AnalysisResponse(questions, List.copyOf(suggestions.values()), parsed.errors());

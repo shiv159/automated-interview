@@ -1,0 +1,17 @@
+[
+  {
+    "stem": "How do SQL indexes improve query performance, and what tradeoffs do they introduce?"
+  },
+  {
+    "stem": "How would you design a resilient Spring Boot REST API backed by PostgreSQL and Docker?"
+  },
+  {
+    "stem": "Tell me about a time you improved reliability in a production service and what you learned."
+  },
+  {
+    "stem": "Explain how Angular communicates with a Spring Boot backend and how you would secure the API."
+  },
+  {
+    "type": "TECHNICAL"
+  }
+]
