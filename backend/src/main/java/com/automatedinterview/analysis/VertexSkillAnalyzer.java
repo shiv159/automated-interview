@@ -1,6 +1,7 @@
 package com.automatedinterview.analysis;
 
 import com.automatedinterview.catalog.SkillCatalog;
+import com.automatedinterview.catalog.SkillCatalogService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -24,11 +25,12 @@ public class VertexSkillAnalyzer {
     private final ChatClient springAiClient;
     private final AiPromptTemplates prompts;
     private final com.automatedinterview.ai.AiResilience resilience;
+    private final SkillCatalogService catalog;
 
-    public VertexSkillAnalyzer(ObjectProvider<ChatClient.Builder> clientBuilder, AiPromptTemplates prompts, com.automatedinterview.ai.AiResilience resilience) {
+    public VertexSkillAnalyzer(ObjectProvider<ChatClient.Builder> clientBuilder, AiPromptTemplates prompts, com.automatedinterview.ai.AiResilience resilience, SkillCatalogService catalog) {
         ChatClient.Builder builder = clientBuilder.getIfAvailable();
         this.springAiClient = builder == null ? null : builder.build();
-        this.prompts = prompts;
+        this.prompts = prompts; this.catalog = catalog;
         this.resilience = resilience;
     }
 
@@ -60,7 +62,7 @@ public class VertexSkillAnalyzer {
 
     private AnalysisResult analyzeChunkResult(String documentType, String document, boolean correction) {
         try {
-            String skills = SkillCatalog.activeSkills().stream()
+            String skills = catalog.activeSkills().stream()
                 .map(skill -> skill.id() + "=" + String.join(", ", skill.aliases()))
                 .reduce((left, right) -> left + "; " + right).orElse("");
             SkillAnalysisResponse response = resilience.call(() -> springAiClient.prompt()
@@ -78,7 +80,7 @@ public class VertexSkillAnalyzer {
             List<String> requirements = classifyRequirements(response.unsupportedRequirements());
             List<String> softRequirements = classifyRequirements(response.softSkillRequirements());
             List<String> domainRequirements = classifyRequirements(response.domainRequirements());
-            return new AnalysisResult(validatedClaims(sanitizeSpringAiClaims(output, document), document), requirements,
+            return new AnalysisResult(validatedClaims(sanitizeSpringAiClaims(output, document, catalog.activeSkills()), document, catalog.activeSkills()), requirements,
                 distinctConcat(softRequirements, requirements.stream().filter(value -> classify(value) == RequirementCategory.SOFT_SKILL).toList()),
                 distinctConcat(domainRequirements, requirements.stream().filter(value -> classify(value) == RequirementCategory.DOMAIN).toList()));
         } catch (SkillProviderException exception) {
@@ -93,6 +95,14 @@ public class VertexSkillAnalyzer {
     }
 
     static List<SkillClaim> validatedClaims(JsonNode output, String document) {
+        return validatedClaims(output, document, List.of(
+            new SkillCatalog.Skill("CORE_JAVA", "Core Java", List.of("java"), true, "1", "seed"),
+            new SkillCatalog.Skill("SPRING_BOOT", "Spring Boot", List.of("spring"), true, "1", "seed"),
+            new SkillCatalog.Skill("SQL_RELATIONAL", "SQL", List.of("sql"), true, "1", "seed"),
+            new SkillCatalog.Skill("ANGULAR", "Angular", List.of("angular"), true, "1", "seed")));
+    }
+
+    static List<SkillClaim> validatedClaims(JsonNode output, String document, List<SkillCatalog.Skill> skills) {
         if (output == null || !output.isObject() || !output.path("skills").isArray()) throw new IllegalArgumentException("invalid_skills");
         String status = normalize(output.path("status").asText("ACCEPT"));
         if ("UNCERTAIN".equals(status)) throw new SkillProviderException(false, "provider_uncertain");
@@ -103,7 +113,7 @@ public class VertexSkillAnalyzer {
             String skillId = normalize(item.path("skillId").asText(""));
             String importance = normalizeImportance(item.path("importance").asText(""));
             String evidence = item.path("evidence").asText("");
-            if (!isKnownSkillStatic(skillId)) throw new IllegalArgumentException("invalid_skill_id");
+            if (skills.stream().noneMatch(skill -> skill.active() && skill.id().equals(skillId))) throw new IllegalArgumentException("invalid_skill_id");
             if (!Set.of("REQUIRED", "PREFERRED").contains(importance)) throw new IllegalArgumentException("invalid_importance");
             if (evidence.isBlank() || evidence.codePointCount(0, evidence.length()) < 3) throw new IllegalArgumentException("missing_evidence");
             if (!seen.add(skillId)) throw new IllegalArgumentException("duplicate_skill");
@@ -119,7 +129,7 @@ public class VertexSkillAnalyzer {
         return claims;
     }
 
-    private static JsonNode sanitizeSpringAiClaims(JsonNode output, String document) {
+    private static JsonNode sanitizeSpringAiClaims(JsonNode output, String document, List<SkillCatalog.Skill> skills) {
         if (!output.isObject() || !output.path("skills").isArray()) return output;
         ObjectNode sanitized = (ObjectNode) output.deepCopy();
         Map<String, ObjectNode> acceptedBySkill = new LinkedHashMap<>();
@@ -130,7 +140,7 @@ public class VertexSkillAnalyzer {
                 acceptedBySkill.merge(skillId, (ObjectNode) item.deepCopy(), VertexSkillAnalyzer::preferRequiredClaim);
                 continue;
             }
-            String exactEvidence = exactCatalogEvidence(skillId, document);
+            String exactEvidence = exactCatalogEvidence(skillId, document, skills);
             if (exactEvidence != null) {
                 ObjectNode repaired = (ObjectNode) item.deepCopy();
                 repaired.put("evidence", exactEvidence);
@@ -147,8 +157,8 @@ public class VertexSkillAnalyzer {
         return "REQUIRED".equalsIgnoreCase(candidate.path("importance").asText()) ? candidate : existing;
     }
 
-    private static String exactCatalogEvidence(String skillId, String document) {
-        return SkillCatalog.activeSkills().stream().filter(skill -> skill.id().equals(skillId)).findFirst()
+    private static String exactCatalogEvidence(String skillId, String document, List<SkillCatalog.Skill> skills) {
+        return skills.stream().filter(skill -> skill.id().equals(skillId)).findFirst()
             .flatMap(skill -> java.util.Arrays.stream(document.split("\\n", -1))
                 .filter(line -> skill.aliases().stream().anyMatch(alias -> line.toLowerCase(java.util.Locale.ROOT).contains(alias.toLowerCase(java.util.Locale.ROOT))))
                 .findFirst()).orElse(null);
@@ -218,10 +228,6 @@ public class VertexSkillAnalyzer {
         if (value.codePointCount(0, value.length()) <= 300) return value;
         int end = value.offsetByCodePoints(0, 300);
         return value.substring(0, end);
-    }
-
-    private static boolean isKnownSkillStatic(String skillId) {
-        return SkillCatalog.activeSkills().stream().anyMatch(skill -> skill.id().equals(skillId));
     }
 
     private static String normalize(String value) {

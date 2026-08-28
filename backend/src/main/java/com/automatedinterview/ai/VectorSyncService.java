@@ -62,8 +62,8 @@ public class VectorSyncService {
      */
     @Transactional
     public void upsert(UUID questionId, String stem, String type,
-                       String primarySkill, String difficulty, String status) {
-        Document document = buildDocument(questionId, stem, type, primarySkill, difficulty, status);
+                       String primarySkill, String difficulty, String secondarySkills, String tags, String status) {
+        Document document = buildDocument(questionId, stem, type, primarySkill, difficulty, secondarySkills, tags, status);
         // Delete first (no-op if the row does not exist), then add the new vector.
         try {
             vectorStore.delete(List.of(questionId.toString()));
@@ -106,6 +106,8 @@ public class VectorSyncService {
                    OR vs.content IS DISTINCT FROM q.stem
                    OR vs.metadata->>'type' IS DISTINCT FROM q.type
                    OR vs.metadata->>'primary_skill' IS DISTINCT FROM COALESCE(q.primary_skill, '')
+                   OR vs.metadata->>'secondary_skills' IS DISTINCT FROM q.secondary_skills::text
+                   OR vs.metadata->>'tags' IS DISTINCT FROM q.tags::text
                    OR vs.metadata->>'difficulty' IS DISTINCT FROM COALESCE(q.difficulty, '')
                    OR vs.metadata->>'status' IS DISTINCT FROM q.status)
             """).query(UUID.class).list();
@@ -122,18 +124,29 @@ public class VectorSyncService {
     }
 
     private Document buildDocument(UUID id, String stem, String type,
-                                   String primarySkill, String difficulty, String status) {
+                                   String primarySkill, String difficulty, String secondarySkills, String tags, String status) {
         Map<String, Object> metadata = new java.util.HashMap<>();
         metadata.put("question_id",   id.toString());
         metadata.put("type",          type);
         metadata.put("primary_skill", primarySkill == null ? "" : primarySkill);
+        metadata.put("secondary_skills", parseJsonArray(secondarySkills));
         metadata.put("difficulty",    difficulty == null ? "" : difficulty);
+        metadata.put("tags",           parseJsonArray(tags));
         metadata.put("status",        status);
         metadata.put("indexing_status", "INDEXED");
         metadata.put("embedding_model", embeddingModel);
         metadata.put("embedding_profile", embeddingProfile);
         metadata.put("embedding_dimensions", embeddingDimensions);
         return new Document(id.toString(), stem, metadata);
+    }
+
+    private List<String> parseJsonArray(String value) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(value == null ? "[]" : value,
+                new com.fasterxml.jackson.core.type.TypeReference<List<String>>() { });
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Invalid question metadata array", exception);
+        }
     }
 
     public static class VectorSyncException extends RuntimeException {

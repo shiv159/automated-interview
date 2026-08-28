@@ -1,34 +1,18 @@
 package com.automatedinterview.catalog;
 
-import java.util.List;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public final class SkillCatalog {
-    public static final String VERSION = "2026-08-04.v1";
-    public static final List<Skill> SKILLS = loadSkills();
-
     private SkillCatalog() { }
 
-    private static List<Skill> loadSkills() {
-        try (var stream = SkillCatalog.class.getResourceAsStream("/skills.json")) {
-            if (stream == null) throw new IllegalStateException("skills.json is missing");
-            List<Skill> skills = List.copyOf(new ObjectMapper().readValue(stream, new TypeReference<List<Skill>>() { }));
-            validate(skills);
-            return skills;
-        } catch (Exception exception) {
-            throw new ExceptionInInitializerError(exception);
-        }
-    }
-
-    public static List<String> matchingSkillIds(String text) {
+    public static List<String> matchingSkillIds(List<Skill> skills, String text) {
         String lower = text == null ? "" : text.toLowerCase(Locale.ROOT);
         List<String> matches = new ArrayList<>();
-        for (Skill skill : activeSkills()) {
+        for (Skill skill : skills.stream().filter(Skill::active).toList()) {
             boolean found = skill.aliases().stream().sorted((left, right) -> Integer.compare(right.length(), left.length()))
                 .anyMatch(alias -> containsAlias(lower, alias));
             if (found) matches.add(skill.id());
@@ -36,9 +20,17 @@ public final class SkillCatalog {
         return matches;
     }
 
-    public static List<Skill> activeSkills() { return SKILLS.stream().filter(Skill::active).toList(); }
+    public static List<String> validateSecondarySkills(List<Skill> skills, String primarySkill, List<String> secondarySkills) {
+        Set<String> known = skills.stream().filter(Skill::active).map(Skill::id).collect(java.util.stream.Collectors.toSet());
+        if (secondarySkills == null) return List.of();
+        Set<String> distinct = new java.util.LinkedHashSet<>(secondarySkills);
+        if (distinct.size() != secondarySkills.size() || distinct.contains(primarySkill)
+                || distinct.stream().anyMatch(id -> !known.contains(id)))
+            throw new IllegalArgumentException("Invalid secondary skills");
+        return List.copyOf(distinct);
+    }
 
-    private static void validate(List<Skill> skills) {
+    public static void validate(List<Skill> skills) {
         Set<String> ids = new HashSet<>();
         for (Skill skill : skills) {
             if (skill.id() == null || skill.id().isBlank() || !ids.add(skill.id()))

@@ -190,6 +190,9 @@ The repository is being implemented in the PRD milestone order: contracts,
 runtime foundation, document analysis, retrieval, question import, interview
 evaluation, Angular journeys, and final verification.
 
-Production does not seed demo questions. Import owner questions through the
-question-bank flow. Set `APP_QUESTION_BANK_SEED_ENABLED=true` only for local
-demo environments; keep it `false` in production.
+Production does not seed demo questions. Upload owner questions through the
+question-bank flow: the analyze step classifies each row and proposes new
+skills, then the owner approves skills individually before importing valid
+rows. Approved skills and question metadata are stored in PostgreSQL; vectors
+are rebuilt asynchronously. Set `APP_QUESTION_BANK_SEED_ENABLED=true` only for
+local demo environments; keep it `false` in production.

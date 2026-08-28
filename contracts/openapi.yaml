@@ -60,6 +60,28 @@ paths:
           content: {application/json: {schema: {$ref: '#/components/schemas/QuestionImportResponse'}}}
         '400': {description: Invalid file or item data, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '422': {description: Rejected with structured item diagnostics, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/question-bank/analyze:
+    post:
+      description: Analyze up to 10 uploaded questions, classify them, and return individually reviewable new skill suggestions.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [questionsFile]
+              properties:
+                questionsFile: {type: string, format: binary}
+      responses:
+        '200': {description: Question analysis draft, content: {application/json: {schema: {$ref: '#/components/schemas/QuestionAnalysisResponse'}}}}
+  /api/v1/question-bank/import-draft:
+    post:
+      description: Import reviewed valid question rows and individually approved skills; invalid rows are skipped.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DraftImportRequest'}}}
+      responses:
+        '200': {description: Import completed, content: {application/json: {schema: {$ref: '#/components/schemas/QuestionImportResponse'}}}}
   /api/v1/sessions/{sessionId}/interview:
     post:
       parameters: [{name: sessionId, in: path, required: true, schema: {type: string, format: uuid}}]
@@ -154,11 +176,13 @@ components:
         nextQuestion: {oneOf: [{$ref: '#/components/schemas/QuestionResponse'}, {type: 'null'}]}
     QuestionImportResponse:
       type: object
-      required: [createdCount, updatedCount, questions]
+      required: [createdCount, updatedCount, skippedCount, questions, errors]
       properties:
         createdCount: {type: integer}
         updatedCount: {type: integer}
+        skippedCount: {type: integer}
         questions: {type: array, items: {$ref: '#/components/schemas/QuestionSummary'}}
+        errors: {type: array, items: {$ref: '#/components/schemas/ImportDiagnostic'}}
     Problem:
       type: object
       required: [type, title, status, detail, instance, code, correlationId]
@@ -196,6 +220,7 @@ components:
         stem: {type: string, minLength: 10, maxLength: 1000}
         type: {type: string, enum: [TECHNICAL, BEHAVIORAL]}
         primarySkill: {type: string, description: Canonical skill ID required when technical classification is ambiguous}
+        secondarySkills: {type: array, uniqueItems: true, items: {type: string}}
         difficulty: {type: string, enum: [EASY, MEDIUM, HARD]}
     DocumentPreviewResponse:
       type: object
@@ -222,11 +247,57 @@ components:
         status: {type: string}
         type: {type: string, enum: [TECHNICAL, BEHAVIORAL]}
         primarySkill: {type: [string, 'null']}
+        secondarySkills: {type: string}
         difficulty: {type: [string, 'null']}
         tags: {type: string}
         rubric: {type: string}
         idealAnswer: {type: [string, 'null']}
         updatedAt: {type: string, format: date-time}
+    QuestionAnalysisResponse:
+      type: object
+      required: [questions, newSkills]
+      properties:
+        questions: {type: array, items: {$ref: '#/components/schemas/AnalysisQuestion'}}
+        newSkills: {type: array, items: {$ref: '#/components/schemas/SkillSuggestion'}}
+        errors: {type: array, items: {$ref: '#/components/schemas/ImportDiagnostic'}}
+    AnalysisQuestion:
+      type: object
+      required: [stem, status]
+      properties:
+        stem: {type: string}
+        type: {type: [string, 'null']}
+        primarySkill: {type: [string, 'null']}
+        secondarySkills: {type: array, items: {type: string}}
+        difficulty: {type: [string, 'null']}
+        tags: {type: array, items: {type: string}}
+        idealAnswer: {type: [string, 'null']}
+        status: {type: string}
+        errorCode: {type: [string, 'null']}
+    SkillSuggestion:
+      type: object
+      required: [id, displayName, aliases, questionIndexes]
+      properties:
+        id: {type: string}
+        displayName: {type: string}
+        aliases: {type: array, items: {type: string}}
+        questionIndexes: {type: array, items: {type: integer}}
+    DraftImportRequest:
+      type: object
+      required: [questions, approvedSkills]
+      properties:
+        questions: {type: array, items: {$ref: '#/components/schemas/DraftQuestion'}}
+        approvedSkills: {type: array, items: {$ref: '#/components/schemas/ApprovedSkill'}}
+    DraftQuestion:
+      allOf:
+        - {$ref: '#/components/schemas/AnalysisQuestion'}
+    ApprovedSkill:
+      type: object
+      required: [id, displayName, aliases]
+      properties:
+        id: {type: string}
+        displayName: {type: string}
+        aliases: {type: array, items: {type: string}}
+        version: {type: string}
     QuestionBankResponse:
       type: object
       required: [questions, total, activeCount, skillAreaCount, coverage, skills]

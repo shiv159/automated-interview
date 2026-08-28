@@ -31,6 +31,23 @@ class VertexQuestionEnricherTest {
     }
 
     @Test
+    void acceptsMultipleSecondarySkillsAlongsideOnePrimarySkill() {
+        String response = """
+            {
+              "type": "TECHNICAL",
+              "primarySkill": "SPRING_BOOT",
+              "secondarySkills": ["DOCKER", "SQL_RELATIONAL"],
+              "difficulty": "MEDIUM",
+              "tags": ["deployment"],
+              "idealAnswer": "A strong answer explains the service boundary, container packaging, database integration, deployment configuration, health checks, and how the design would be tested in production."
+            }
+            """;
+
+        assertEquals(java.util.List.of("DOCKER", "SQL_RELATIONAL"),
+            VertexQuestionEnricher.parseCandidateText(response, "TECHNICAL", "SPRING_BOOT").secondarySkills());
+    }
+
+    @Test
     void rejectsUnknownProperties() {
         String response = """
             {

@@ -1,6 +1,7 @@
 package com.automatedinterview.questionbank;
 
 import com.automatedinterview.catalog.SkillCatalog;
+import com.automatedinterview.catalog.SkillCatalogService;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
@@ -21,15 +22,16 @@ public class QuestionSeedLoader implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(QuestionSeedLoader.class);
 
     private final JdbcClient jdbc;
+    private final SkillCatalogService catalog;
 
-    public QuestionSeedLoader(JdbcClient jdbc) {
-        this.jdbc = jdbc;
+    public QuestionSeedLoader(JdbcClient jdbc, SkillCatalogService catalog) {
+        this.jdbc = jdbc; this.catalog = catalog;
     }
 
     @Override
     public void run(String... args) {
         List<String> difficulties = List.of("EASY", "MEDIUM", "HARD");
-        for (SkillCatalog.Skill skill : SkillCatalog.activeSkills()) {
+        for (SkillCatalog.Skill skill : catalog.activeSkills()) {
             for (String difficulty : difficulties) {
                 for (int index = 1; index <= 2; index++) {
                     String stem = "Explain a " + difficulty.toLowerCase() + " " + skill.displayName()

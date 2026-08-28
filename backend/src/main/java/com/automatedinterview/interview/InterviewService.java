@@ -106,7 +106,7 @@ public class InterviewService {
     }
 
     private QuestionRow loadQuestion(UUID id, String skill, String difficulty) {
-        return jdbc.sql("SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash FROM question WHERE id = :id AND status = 'ACTIVE' AND (:skill::text IS NULL OR primary_skill = :skill) AND (:difficulty::text IS NULL OR difficulty = :difficulty)")
+        return jdbc.sql("SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash FROM question WHERE id = :id AND status = 'ACTIVE' AND (:skill::text IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill)) AND (:difficulty::text IS NULL OR difficulty = :difficulty)")
             .param("id", id).param("skill", skill).param("difficulty", difficulty).query(this::question).optional().orElse(null);
     }
 
@@ -131,7 +131,7 @@ public class InterviewService {
             SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash
             FROM question
             WHERE id = :id AND status = 'ACTIVE'
-              AND (:skill::text IS NULL OR primary_skill = :skill)
+              AND (:skill::text IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill))
               AND (:difficulty::text IS NULL OR difficulty = :difficulty)
             """)
             .param("id", questionId)

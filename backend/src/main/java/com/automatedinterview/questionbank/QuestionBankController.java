@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import com.automatedinterview.catalog.SkillCatalog;
+import com.automatedinterview.catalog.SkillCatalogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -22,12 +23,24 @@ import org.springframework.web.bind.annotation.RestController;
 public class QuestionBankController {
     private final JdbcClient jdbc;
     private final QuestionImportService imports;
+    private final SkillCatalogService catalog;
 
-    public QuestionBankController(JdbcClient jdbc, QuestionImportService imports) { this.jdbc = jdbc; this.imports = imports; }
+    public QuestionBankController(JdbcClient jdbc, QuestionImportService imports, SkillCatalogService catalog) { this.jdbc = jdbc; this.imports = imports; this.catalog = catalog; }
 
     @PostMapping("/import")
     public ResponseEntity<QuestionImportService.ImportResponse> importQuestions(@RequestParam MultipartFile questionsFile) {
         QuestionImportService.ImportResponse response = imports.importFile(questionsFile);
+        return ResponseEntity.status(response.createdCount() > 0 ? HttpStatus.CREATED : HttpStatus.OK).body(response);
+    }
+
+    @PostMapping("/analyze")
+    public QuestionImportService.AnalysisResponse analyzeQuestions(@RequestParam MultipartFile questionsFile) {
+        return imports.analyzeFile(questionsFile);
+    }
+
+    @PostMapping("/import-draft")
+    public ResponseEntity<QuestionImportService.ImportResponse> importDraft(@RequestBody QuestionImportService.DraftImportRequest request) {
+        QuestionImportService.ImportResponse response = imports.importDraft(request);
         return ResponseEntity.status(response.createdCount() > 0 ? HttpStatus.CREATED : HttpStatus.OK).body(response);
     }
 
@@ -39,10 +52,10 @@ public class QuestionBankController {
     @GetMapping
     public QuestionBankResponse list() {
         List<QuestionSummary> questions = jdbc.sql("""
-            SELECT id, stem, origin, status, type, primary_skill, difficulty, tags, rubric, ideal_answer, updated_at
+            SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty, tags, rubric, ideal_answer, updated_at
             FROM question ORDER BY origin, type, primary_skill NULLS LAST, difficulty NULLS LAST, id
             """).query((rs, row) -> new QuestionSummary(rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"),
-                rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("tags"),
+                rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"),
                 rs.getString("rubric"), rs.getString("ideal_answer"), rs.getTimestamp("updated_at").toInstant())).list();
         List<CoverageBucket> coverage = jdbc.sql("""
             SELECT type, primary_skill, difficulty, status, count(*) AS total
@@ -51,13 +64,13 @@ public class QuestionBankController {
             """).query((rs, row) -> new CoverageBucket(rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("status"), rs.getLong("total"))).list();
         long active = questions.stream().filter(item -> item.status().equals("ACTIVE")).count();
         long skillAreaCount = questions.stream().map(item -> item.primarySkill() == null ? "BEHAVIORAL" : item.primarySkill()).distinct().count();
-        List<SkillOption> skills = SkillCatalog.activeSkills().stream().map(skill -> new SkillOption(skill.id(), skill.displayName(), skill.aliases())).toList();
+        List<SkillOption> skills = catalog.activeSkills().stream().map(skill -> new SkillOption(skill.id(), skill.displayName(), skill.aliases())).toList();
         return new QuestionBankResponse(questions, questions.size(), active, Math.max(skillAreaCount, skills.size()), coverage, skills);
     }
 
     public record QuestionBankResponse(List<QuestionSummary> questions, int total, long activeCount, long skillAreaCount, List<CoverageBucket> coverage, List<SkillOption> skills) { }
     public record SkillOption(String id, String displayName, List<String> aliases) { }
-    public record QuestionSummary(UUID id, String stem, String origin, String status, String type, String primarySkill, String difficulty, String tags, String rubric, String idealAnswer, Instant updatedAt) { }
+    public record QuestionSummary(UUID id, String stem, String origin, String status, String type, String primarySkill, String secondarySkills, String difficulty, String tags, String rubric, String idealAnswer, Instant updatedAt) { }
     public record CoverageBucket(String type, String primarySkill, String difficulty, String status, long count) { }
     public record StatusRequest(String status) { }
 }

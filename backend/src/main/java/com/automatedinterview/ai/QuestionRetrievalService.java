@@ -3,6 +3,7 @@ package com.automatedinterview.ai;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
@@ -29,10 +30,11 @@ public class QuestionRetrievalService {
         var sample = io.micrometer.core.instrument.Timer.start(meters);
         var b = new FilterExpressionBuilder();
         var filter = b.and(b.eq("type", type), b.and(b.eq("status", "ACTIVE"), b.eq("indexing_status", "INDEXED")));
-        if (skill != null) filter = b.and(filter, b.eq("primary_skill", skill));
+        // primary_skill is scalar metadata, but secondary_skills is an array. Do not use
+        // eq() for the array; the authoritative JSONB membership check below handles it.
         if (difficulty != null) filter = b.and(filter, b.eq("difficulty", difficulty));
         Map<UUID, Double> scores = new HashMap<>();
-        for (Document document : vectorStore.similaritySearch(SearchRequest.builder().query(query).topK(10)
+        for (Document document : vectorStore.similaritySearch(SearchRequest.builder().query(query).topK(30)
                 .filterExpression(filter.build()).build())) {
             try {
                 UUID id = UUID.fromString(String.valueOf(document.getMetadata().get("question_id")));
@@ -40,10 +42,21 @@ public class QuestionRetrievalService {
                     scores.put(id, document.getScore());
             } catch (RuntimeException ignored) { }
         }
+        if (!scores.isEmpty()) {
+            String skillClause = skill == null ? "" : " AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill))";
+            List<UUID> compatible = jdbc.sql("""
+                SELECT id FROM question
+                WHERE id IN (:candidateIds) AND status = 'ACTIVE' AND indexing_status = 'INDEXED'
+                  AND type = :type
+                """ + skillClause + " AND (:difficulty::text IS NULL OR difficulty = :difficulty)")
+                .param("candidateIds", scores.keySet()).param("type", type).param("skill", skill)
+                .param("difficulty", difficulty).query(UUID.class).list();
+            scores.keySet().retainAll(Set.copyOf(compatible));
+        }
         jdbc.sql("""
             SELECT id, ts_rank(to_tsvector('simple', stem), plainto_tsquery('simple', :query)) AS rank
             FROM question WHERE status = 'ACTIVE' AND indexing_status = 'INDEXED'
-              AND type = :type AND (:skill::text IS NULL OR primary_skill = :skill)
+              AND type = :type AND (:skill::text IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill))
               AND (:difficulty::text IS NULL OR difficulty = :difficulty)
               AND to_tsvector('simple', stem) @@ plainto_tsquery('simple', :query)
             ORDER BY rank DESC LIMIT 10

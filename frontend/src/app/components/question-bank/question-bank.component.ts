@@ -3,13 +3,13 @@ import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiErrorService } from '../../services/api-error.service';
-import { QuestionBank, QuestionBankService, QuestionSummary } from '../../services/question-bank.service';
+import { AnalysisQuestion, QuestionBank, QuestionBankService, QuestionSummary, SkillSuggestion } from '../../services/question-bank.service';
 
 @Component({ selector: 'app-question-bank', standalone: true, imports: [DatePipe, RouterLink, FormsModule], templateUrl: './question-bank.component.html', styleUrl: './question-bank.component.scss' })
 export class QuestionBankComponent implements OnInit {
   private questionBankService = inject(QuestionBankService);
   private apiErrors = inject(ApiErrorService);
-  readonly busy = signal(false); readonly message = signal(''); readonly bank = signal<QuestionBank | null>(null);
+  readonly busy = signal(false); readonly message = signal(''); readonly bank = signal<QuestionBank | null>(null); readonly draft = signal<AnalysisQuestion[]>([]); readonly suggestions = signal<SkillSuggestion[]>([]);
   ownerFile: File | null = null; searchTerm = ''; skillFilter = 'ALL'; difficultyFilter = 'ALL'; originFilter = 'ALL'; selectedQuestion: QuestionSummary | null = null;
 
   async ngOnInit() { await this.loadBank(); }
@@ -43,10 +43,25 @@ export class QuestionBankComponent implements OnInit {
     const name = this.ownerFile.name.toLowerCase();
     if (this.ownerFile.size > 65536 || (!name.endsWith('.txt') && !name.endsWith('.json'))) { this.message.set('Choose a UTF-8 TXT or JSON file no larger than 64 KiB.'); return; }
     this.busy.set(true); this.message.set('');
-    try { const payload = await this.questionBankService.importQuestions(this.ownerFile); this.message.set(`Imported ${payload.createdCount} new and ${payload.updatedCount} updated questions.`); await this.loadBank(); }
+    try { const payload = await this.questionBankService.analyzeQuestions(this.ownerFile); this.draft.set(payload.questions); this.suggestions.set(payload.newSkills.map(skill => ({ ...skill, approved: true }))); this.message.set('Review the detected skills, then import valid questions.'); }
     catch (e: any) { this.message.set(this.apiErrors.message(e, 'Import failed.')); }
     finally { this.busy.set(false); }
   }
+
+  async commitDraft() {
+    const questions = this.draft();
+    if (!questions.length) return;
+    this.busy.set(true); this.message.set('');
+    try {
+      const payload = await this.questionBankService.importDraft({ questions, approvedSkills: this.suggestions().filter(skill => skill.approved) });
+      this.message.set(`Imported ${payload.createdCount} new, ${payload.updatedCount} updated, and ${payload.skippedCount} skipped questions.`);
+      this.draft.set([]); this.suggestions.set([]); await this.loadBank();
+    } catch (e: any) { this.message.set(this.apiErrors.message(e, 'Import failed.')); }
+    finally { this.busy.set(false); }
+  }
+
+  toggleSuggestion(skill: SkillSuggestion) { skill.approved = !skill.approved; this.suggestions.set([...this.suggestions()]); }
+  updateSuggestionAliases(skill: SkillSuggestion, value: string) { skill.aliases = value.split(',').map(alias => alias.trim()).filter(Boolean); this.suggestions.set([...this.suggestions()]); }
 
   async toggleStatus(question: QuestionSummary) {
     this.busy.set(true);

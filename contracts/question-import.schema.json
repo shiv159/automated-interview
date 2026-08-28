@@ -11,6 +11,7 @@
       "stem": {"type": "string", "minLength": 10, "maxLength": 1000},
       "type": {"enum": ["TECHNICAL", "BEHAVIORAL"]},
       "primarySkill": {"type": ["string", "null"]},
+      "secondarySkills": {"type": "array", "uniqueItems": true, "maxItems": 10, "items": {"type": "string"}},
       "difficulty": {"enum": ["EASY", "MEDIUM", "HARD", null]}
     }
   }

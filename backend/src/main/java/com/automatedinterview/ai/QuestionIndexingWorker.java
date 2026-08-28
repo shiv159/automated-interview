@@ -37,7 +37,7 @@ public class QuestionIndexingWorker {
         try {
             for (Question question : claimBatch()) {
                 try {
-                    vectorSync.upsert(question.id(), question.stem(), question.type(), question.skill(), question.difficulty(), "ACTIVE");
+                    vectorSync.upsert(question.id(), question.stem(), question.type(), question.skill(), question.difficulty(), question.secondarySkills(), question.tags(), "ACTIVE");
                     markIndexed(question);
                 } catch (Exception exception) {
                     markFailed(question, exception);
@@ -75,11 +75,11 @@ public class QuestionIndexingWorker {
             FROM claimed c
             WHERE q.id = c.id
             RETURNING q.id, q.stem, q.type, COALESCE(q.primary_skill, ''),
-                      COALESCE(q.difficulty, ''), q.source_hash, q.indexing_attempts
+                      COALESCE(q.difficulty, ''), q.secondary_skills::text, q.tags::text, q.source_hash, q.indexing_attempts
             """)
             .param("maxAttempts", maxAttempts).param("batchSize", batchSize).param("leaseMillis", leaseMillis)
             .query((rs, row) -> new Question(rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3),
-                    rs.getString(4), rs.getString(5), rs.getString(6), rs.getInt(7))).list();
+                    rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8), rs.getInt(9))).list();
     }
 
     @Transactional
@@ -111,5 +111,5 @@ public class QuestionIndexingWorker {
         return Math.min(MAX_DELAY_MILLIS, 60_000L * multiplier);
     }
 
-    record Question(UUID id, String stem, String type, String skill, String difficulty, String sourceHash, int attempts) { }
+    record Question(UUID id, String stem, String type, String skill, String difficulty, String secondarySkills, String tags, String sourceHash, int attempts) { }
 }
