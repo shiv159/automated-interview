@@ -13,10 +13,13 @@ import java.util.Set;
 import com.automatedinterview.catalog.SkillCatalog;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.ai.chat.client.ChatClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class VertexQuestionEnricher {
+    private static final Logger log = LoggerFactory.getLogger(VertexQuestionEnricher.class);
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final Set<String> EXPECTED_FIELDS = Set.of("type", "primarySkill", "secondarySkills", "difficulty", "tags", "idealAnswer");
     private static final Set<String> DIFFICULTIES = Set.of("EASY", "MEDIUM", "HARD");
@@ -59,7 +62,10 @@ public class VertexQuestionEnricher {
             String skill = readNullableText(value, "primarySkill", "invalid_primary_skill");
             return parseCandidateNode(value, type, skill);
         } catch (ProviderUnavailable exception) { throw exception; }
-        catch (Exception exception) { throw new ProviderUnavailable(); }
+        catch (Exception exception) {
+            log.warn("question_analysis_failed reason={} message={}", exception.getClass().getSimpleName(), exception.getMessage());
+            throw new ProviderUnavailable();
+        }
     }
 
     static Enrichment parseCandidateText(String text, String deterministicType, String deterministicSkill) {
