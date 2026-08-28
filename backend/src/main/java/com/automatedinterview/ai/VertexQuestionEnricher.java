@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import com.automatedinterview.catalog.SkillCatalog;
@@ -58,9 +59,14 @@ public class VertexQuestionEnricher {
             JsonNode value = mapper.readTree(normalizeCandidateText(text));
             if (!value.isObject()) throw validation("root_not_object");
             rejectUnknownProperties(value);
-            String type = readRequiredText(value, "type", "invalid_type");
+            ObjectNode normalized = ((ObjectNode) value).deepCopy();
+            String type = readRequiredText(value, "type", "invalid_type").strip().toUpperCase(Locale.ROOT);
+            normalized.put("type", type);
             String skill = readNullableText(value, "primarySkill", "invalid_primary_skill");
-            return parseCandidateNode(value, type, skill);
+            if (skill != null) normalized.put("primarySkill", canonicalSkillId(skill));
+            JsonNode difficulty = value.get("difficulty");
+            if (difficulty != null && difficulty.isTextual()) normalized.put("difficulty", difficulty.asText().strip().toUpperCase(Locale.ROOT));
+            return parseCandidateNode(normalized, type, skill == null ? null : canonicalSkillId(skill));
         } catch (ProviderUnavailable exception) { throw exception; }
         catch (Exception exception) {
             log.warn("question_analysis_failed reason={} message={}", exception.getClass().getSimpleName(), exception.getMessage());
@@ -200,6 +206,10 @@ public class VertexQuestionEnricher {
 
     private static ValidationFailure validation(String category) {
         return new ValidationFailure(category);
+    }
+
+    private static String canonicalSkillId(String value) {
+        return value.strip().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]+", "_").replaceAll("_+", "_");
     }
 
     public record Enrichment(String type, String skill, List<String> secondarySkills, String difficulty, List<String> tags, String idealAnswer) {
