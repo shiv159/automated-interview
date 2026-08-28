@@ -149,8 +149,14 @@ public class QuestionImportService {
             String[] lines = value.split("\n", -1);
             for (int index = 0; index < lines.length; index++) {
                 try {
-                    String stem = normalizeStem(lines[index]);
+                    if (lines[index].strip().isBlank()) continue;
+                    String candidate = removeTextListPrefix(lines[index]);
+                    ImportException rawStemError = validateTextQuestionStem(candidate.strip());
+                    if (rawStemError != null) throw rawStemError;
+                    String stem = normalizeStem(candidate);
                     if (stem.isBlank()) continue;
+                    ImportException stemError = validateTextQuestionStem(stem);
+                    if (stemError != null) throw stemError;
                     if (!seen.add(stem)) throw new ImportException("INVALID_QUESTION_FILE", 422, "Duplicate question stem.", null, index + 1, "stem", "Remove the duplicate line.");
                     items.add(new ImportItem(stem, null, null, null, List.of()));
                 } catch (ImportException exception) { errors.add(exception.withContext(null, index + 1, exception.field(), exception.hint()).diagnostic()); }
@@ -283,9 +289,15 @@ public class QuestionImportService {
             String[] rawLines = value.split("\n", -1);
             for (int lineIndex = 0; lineIndex < rawLines.length; lineIndex++) {
                 String normalized;
-                try { normalized = normalizeStem(rawLines[lineIndex]); }
+                if (rawLines[lineIndex].strip().isBlank()) continue;
+                String candidate = removeTextListPrefix(rawLines[lineIndex]);
+                ImportException rawStemError = validateTextQuestionStem(candidate.strip());
+                if (rawStemError != null) { errors.add(rawStemError.withContext(null, lineIndex + 1, rawStemError.field(), rawStemError.hint()).diagnostic()); continue; }
+                try { normalized = normalizeStem(candidate); }
                 catch (ImportException exception) { errors.add(exception.withContext(null, lineIndex + 1, exception.field(), exception.hint()).diagnostic()); continue; }
                 if (normalized.isBlank()) continue;
+                ImportException stemError = validateTextQuestionStem(normalized);
+                if (stemError != null) { errors.add(stemError.withContext(null, lineIndex + 1, stemError.field(), stemError.hint()).diagnostic()); continue; }
                 if (!seen.add(normalized)) { errors.add(new ImportException("INVALID_QUESTION_FILE", 422, "Duplicate question stem.", null, lineIndex + 1, "stem", "Remove the duplicate line or change its stem.").diagnostic()); continue; }
                 lines.add(new ImportItem(normalized, null, null, null, List.of()));
             }
@@ -342,6 +354,21 @@ public class QuestionImportService {
         if (normalized.indexOf('\0') >= 0 || normalized.chars().anyMatch(character -> Character.isISOControl(character) && character != '\t')) throw new ImportException("INVALID_QUESTION_FILE", 400);
         if (!normalized.isBlank() && (normalized.codePointCount(0, normalized.length()) < 10 || normalized.codePointCount(0, normalized.length()) > 1000)) throw new ImportException("INVALID_QUESTION_FILE", 400);
         return normalized;
+    }
+
+    static ImportException validateTextQuestionStem(String stem) {
+        if (stem == null || stem.codePointCount(0, stem.length()) < 20) {
+            return new ImportException("INVALID_QUESTION_STEM", 422, "Question stem is too short.", null, null, "stem", "Provide a question with at least 20 characters.");
+        }
+        String trimmed = stem.strip();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            return new ImportException("INVALID_QUESTION_STEM", 422, "Question stem looks like a placeholder.", null, null, "stem", "Replace the placeholder with a real interview question.");
+        }
+        return null;
+    }
+
+    static String removeTextListPrefix(String value) {
+        return value.replaceFirst("^\\s*(?:[Qq]\\s*\\d+[:.)]|\\d+[.)]|[-*•])\\s*", "").strip();
     }
 
     private List<String> optionalStringArray(JsonNode node, String field, int itemNumber) {

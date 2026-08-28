@@ -1,6 +1,7 @@
 package com.automatedinterview.questionbank;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -33,5 +34,22 @@ class QuestionImportDiagnosticsTest {
         assertEquals(2, exception.errors().size());
         assertEquals(2, exception.errors().get(0).line());
         assertEquals(3, exception.errors().get(1).item());
+    }
+
+    @Test
+    void rejectsShortAndNonQuestionLikeTextStems() {
+        var exception = QuestionImportService.validateTextQuestionStem("[INVALID TEST ROW: missing question text]");
+        assertEquals("INVALID_QUESTION_STEM", exception.code());
+        assertTrue(exception.hint().contains("question"));
+
+        assertEquals("INVALID_QUESTION_STEM", QuestionImportService.validateTextQuestionStem("Hi").code());
+        assertNull(QuestionImportService.validateTextQuestionStem("Build a REST API with Spring Boot."));
+    }
+
+    @Test
+    void removesCommonTextListPrefixes() {
+        assertEquals("Design a Spring Boot service.", QuestionImportService.removeTextListPrefix("Q3: Design a Spring Boot service."));
+        assertEquals("What is PostgreSQL?", QuestionImportService.removeTextListPrefix("2) What is PostgreSQL?"));
+        assertEquals("Explain Docker.", QuestionImportService.removeTextListPrefix("- Explain Docker."));
     }
 }
