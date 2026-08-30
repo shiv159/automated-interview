@@ -35,6 +35,9 @@ export interface QuestionBank {
   skillAreaCount: number;
   coverage: CoverageBucket[];
   skills?: SkillOption[];
+  page: number;
+  size: number;
+  totalPages: number;
 }
 export interface AnalysisQuestion {
   stem: string;
@@ -71,26 +74,21 @@ export interface ImportResponse {
 export class QuestionBankService {
   private http = inject(HttpClient);
 
-  async getBank(): Promise<QuestionBank> {
+  async getBank(params: { page: number; size: number; search?: string; skill?: string; difficulty?: string; origin?: string }): Promise<QuestionBank> {
+    const query = new URLSearchParams({ page: String(params.page), size: String(params.size) });
+    for (const [key, value] of Object.entries(params)) if (key !== "page" && key !== "size" && value && value !== "ALL") query.set(key, String(value));
     const response = await firstValueFrom(
-      this.http.get<QuestionBank>("/api/v1/question-bank"),
+      this.http.get<QuestionBank>(`/api/v1/question-bank?${query}`),
     );
     return {
       ...response,
-      activeCount: response.questions.filter(
-        (item) => item.status === "ACTIVE",
-      ).length,
+      activeCount: response.activeCount,
     };
   }
 
-  async importQuestions(
-    file: File,
-  ): Promise<ImportResponse> {
-    const body = new FormData();
-    body.append("questionsFile", file);
-    return firstValueFrom(
-      this.http.post<ImportResponse>("/api/v1/question-bank/import", body),
-    );
+  async exportQuestions(format: "json" | "csv", params: Record<string, string>): Promise<string> {
+    const query = new URLSearchParams({ format, ...params });
+    return firstValueFrom(this.http.get(`/api/v1/question-bank/export?${query}`, { responseType: "text" }));
   }
 
   async analyzeQuestions(file: File): Promise<QuestionAnalysis> {

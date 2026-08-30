@@ -8,10 +8,11 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import com.automatedinterview.ai.AiProperties;
+import com.automatedinterview.config.QuestionLimitsProperties;
 
 @SpringBootApplication
 @EnableScheduling
-@EnableConfigurationProperties(AiProperties.class)
+@EnableConfigurationProperties({AiProperties.class, QuestionLimitsProperties.class})
 public class Application {
     public static void main(String[] args) {
         SpringApplication application = new SpringApplication(Application.class);

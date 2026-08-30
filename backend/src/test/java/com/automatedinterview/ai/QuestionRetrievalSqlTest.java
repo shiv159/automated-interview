@@ -23,4 +23,9 @@ class QuestionRetrievalSqlTest {
         assertTrue(query.contains("jsonb_build_array(CAST(:skill AS text))"));
         assertTrue(query.contains("CAST(:difficulty AS text) IS NULL"));
     }
+
+    @Test
+    void interviewProgressionUsesConfiguredSessionQuestionCount() {
+        assertTrue(InterviewService.progressionQuery().contains(":totalQuestions"));
+    }
 }

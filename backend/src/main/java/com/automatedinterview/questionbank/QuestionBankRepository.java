@@ -7,26 +7,83 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class QuestionBankRepository {
+    private static final String LIST_QUERY = """
+            SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty,
+                   tags, rubric, ideal_answer, updated_at
+            FROM question
+            WHERE (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
+              AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+              AND (:difficulty IS NULL OR difficulty = :difficulty)
+              AND (:origin IS NULL OR origin = :origin)
+            ORDER BY origin, type, primary_skill NULLS LAST, difficulty NULLS LAST, id
+            LIMIT :size OFFSET :offset
+            """;
     private final JdbcClient jdbc;
 
     public QuestionBankRepository(JdbcClient jdbc) {
         this.jdbc = jdbc;
     }
 
-    public List<QuestionBankController.QuestionSummary> listQuestions() {
+    public List<QuestionBankController.QuestionSummary> listQuestions(Filter filter, int size, long offset) {
+        return jdbc.sql(LIST_QUERY).params(filter.params(size, offset)).query(this::summary).list();
+    }
+
+    public List<QuestionBankController.QuestionSummary> listQuestions(Filter filter, int max) {
+        return listQuestions(filter, max, 0);
+    }
+
+    public long countQuestions(Filter filter) {
         return jdbc.sql("""
-                SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty,
-                       tags, rubric, ideal_answer, updated_at
+                SELECT count(*) FROM question
+                WHERE (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
+                  AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+                  AND (:difficulty IS NULL OR difficulty = :difficulty)
+                  AND (:origin IS NULL OR origin = :origin)
+                """).params(filter.params(0, 0)).query(Long.class).single();
+    }
+
+    public long countActiveQuestions(Filter filter) {
+        return jdbc.sql("""
+                SELECT count(*) FROM question
+                WHERE status = 'ACTIVE'
+                  AND (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
+                  AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+                  AND (:difficulty IS NULL OR difficulty = :difficulty)
+                  AND (:origin IS NULL OR origin = :origin)
+                """).params(filter.params(0, 0)).query(Long.class).single();
+    }
+
+    public long countSkillAreas(Filter filter) {
+        return jdbc.sql("""
+                SELECT count(DISTINCT CASE WHEN type = 'BEHAVIORAL' THEN 'BEHAVIORAL' ELSE primary_skill END)
                 FROM question
-                ORDER BY origin, type, primary_skill NULLS LAST, difficulty NULLS LAST, id
-                """)
-            .query((rs, row) -> new QuestionBankController.QuestionSummary(
-                rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"),
-                rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"),
-                rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"),
-                rs.getString("rubric"), rs.getString("ideal_answer"),
-                rs.getTimestamp("updated_at").toInstant()))
-            .list();
+                WHERE (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
+                  AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+                  AND (:difficulty IS NULL OR difficulty = :difficulty)
+                  AND (:origin IS NULL OR origin = :origin)
+                """).params(filter.params(0, 0)).query(Long.class).single();
+    }
+
+    private QuestionBankController.QuestionSummary summary(java.sql.ResultSet rs, int row) throws java.sql.SQLException {
+        return new QuestionBankController.QuestionSummary(
+            rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"),
+            rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"),
+            rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"),
+            rs.getString("rubric"), rs.getString("ideal_answer"), rs.getTimestamp("updated_at").toInstant());
+    }
+
+    public static String listQuery() {
+        return LIST_QUERY;
+    }
+
+    public record Filter(String search, String skill, String difficulty, String origin) {
+        public java.util.Map<String, Object> params(int size, long offset) {
+            var values = new java.util.HashMap<String, Object>();
+            values.put("search", search == null || search.isBlank() ? null : "%" + search.strip() + "%");
+            values.put("skill", skill); values.put("difficulty", difficulty); values.put("origin", origin);
+            values.put("size", size); values.put("offset", offset);
+            return values;
+        }
     }
 
     public List<QuestionBankController.CoverageBucket> coverage() {

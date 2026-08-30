@@ -30,6 +30,8 @@ export class QuestionBankComponent implements OnInit {
   readonly bank = signal<QuestionBank | null>(null);
   readonly draft = signal<AnalysisQuestion[]>([]);
   readonly suggestions = signal<SkillSuggestion[]>([]);
+  readonly page = signal(0);
+  readonly pageSize = 50;
 
   // Admin key modal
   readonly showKeyModal = signal(false);
@@ -65,7 +67,7 @@ export class QuestionBankComponent implements OnInit {
 
   async loadBank() {
     try {
-      this.bank.set(await this.questionBankService.getBank());
+      this.bank.set(await this.questionBankService.getBank({ page: this.page(), size: this.pageSize, search: this.searchTerm, skill: this.skillFilter, difficulty: this.difficultyFilter, origin: this.originFilter }));
     } catch (e) {
       this.bank.set(null);
       if (e instanceof HttpErrorResponse && e.status === 401) {
@@ -76,6 +78,19 @@ export class QuestionBankComponent implements OnInit {
         this.message.set(this.apiErrors.message(e, "Question bank unavailable."));
       }
     }
+  }
+
+  async applyFilters() {
+    this.page.set(0);
+    await this.loadBank();
+  }
+
+  async changePage(delta: number) {
+    const next = this.page() + delta;
+    const totalPages = this.bank()?.totalPages ?? 0;
+    if (next < 0 || next >= totalPages) return;
+    this.page.set(next);
+    await this.loadBank();
   }
 
   get skillOptions(): string[] {
@@ -95,20 +110,7 @@ export class QuestionBankComponent implements OnInit {
   }
 
   get filteredQuestions(): QuestionSummary[] {
-    const rows = this.bank()?.questions ?? [];
-    const term = this.searchTerm.trim().toLowerCase();
-    return rows.filter(
-      (q) =>
-        (!term ||
-          `${q.stem} ${q.primarySkill ?? ""} ${q.origin ?? ""}`
-            .toLowerCase()
-            .includes(term)) &&
-        (this.skillFilter === "ALL" ||
-          (q.primarySkill ?? "BEHAVIORAL") === this.skillFilter) &&
-        (this.difficultyFilter === "ALL" ||
-          (q.difficulty ?? "ALL") === this.difficultyFilter) &&
-        (this.originFilter === "ALL" || q.origin === this.originFilter),
-    );
+    return this.bank()?.questions ?? [];
   }
 
   displaySkill(skill: string): string {
@@ -246,25 +248,8 @@ export class QuestionBankComponent implements OnInit {
     return (event.target as HTMLInputElement).value;
   }
 
-  exportQuestions(format: "json" | "csv") {
-    const rows = this.filteredQuestions;
-    const content =
-      format === "json"
-        ? JSON.stringify(rows, null, 2)
-        : [
-            "Question,Skill,Difficulty,Origin,Status",
-            ...rows.map((q) =>
-              [
-                q.stem,
-                q.primarySkill || "Behavioral",
-                q.difficulty || "All levels",
-                q.origin,
-                q.status,
-              ]
-                .map((v) => `"${String(v).replaceAll('"', '""')}"`)
-                .join(","),
-            ),
-          ].join("\n");
+  async exportQuestions(format: "json" | "csv") {
+    const content = await this.questionBankService.exportQuestions(format, { search: this.searchTerm, skill: this.skillFilter, difficulty: this.difficultyFilter, origin: this.originFilter });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(
       new Blob([content], {

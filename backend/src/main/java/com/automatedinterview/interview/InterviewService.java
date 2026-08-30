@@ -5,6 +5,7 @@ import com.automatedinterview.analysis.SkillClaim;
 import com.automatedinterview.ai.VertexAnswerEvaluator;
 import com.automatedinterview.ai.QuestionRetrievalService;
 import com.automatedinterview.document.DocumentNormalizer;
+import com.automatedinterview.config.QuestionLimitsProperties;
 import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -30,12 +31,15 @@ public class InterviewService {
     private final VectorStore vectorStore;
     private final QuestionRetrievalService retrieval;
     private final ObjectMapper json;
+    private final QuestionLimitsProperties.Interview limits;
 
     public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator, VectorStore vectorStore,
         QuestionRetrievalService retrieval, ObjectMapper json,
-        @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile) {
+        @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile,
+        QuestionLimitsProperties properties) {
         this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.vectorStore = vectorStore; this.retrieval = retrieval; this.json = json;
         this.evaluationProfile = evaluationProfile;
+        this.limits = properties.interview();
     }
 
     @Transactional
@@ -59,7 +63,8 @@ public class InterviewService {
 
         List<QuestionRow> technical = new ArrayList<>();
         Set<UUID> used = new HashSet<>();
-        for (int position = 1; position <= 2; position++) {
+        int technicalTarget = Math.max(0, limits.questionsPerSession() - 1);
+        for (int position = 1; position <= technicalTarget; position++) {
             QuestionRow selected = null;
             for (int offset = 0; offset < targets.size(); offset++) {
                 TargetSkill target = targets.get((position - 1 + offset) % targets.size());
@@ -67,15 +72,26 @@ public class InterviewService {
                 selected = searchTechnical(queryText, target.skillId(), session.difficulty(), used);
                 if (selected != null) break;
             }
-            if (selected == null) throw new InterviewException("QUESTION_BANK_UNAVAILABLE", 503);
+            if (selected == null) break;
             technical.add(selected); used.add(selected.id());
         }
 
         QuestionRow behavioral = searchBehavioral();
-        if (behavioral == null) throw new InterviewException("QUESTION_BANK_UNAVAILABLE", 503);
+        if (behavioral != null) used.add(behavioral.id());
 
         List<QuestionRow> questions = new ArrayList<>(technical);
-        questions.add(behavioral);
+        if (behavioral != null && questions.size() < limits.questionsPerSession()) questions.add(behavioral);
+        while (questions.size() < limits.questionsPerSession()) {
+            QuestionRow selected = null;
+            for (int offset = 0; offset < targets.size(); offset++) {
+                TargetSkill target = targets.get((questions.size() + offset) % targets.size());
+                selected = searchTechnical(queryText(target, session.difficulty()), target.skillId(), session.difficulty(), used);
+                if (selected != null) break;
+            }
+            if (selected == null) break;
+            questions.add(selected); used.add(selected.id());
+        }
+        if (questions.isEmpty()) throw new InterviewException("QUESTION_BANK_UNAVAILABLE", 503);
         for (int index = 0; index < questions.size(); index++) {
             QuestionRow question = questions.get(index);
             jdbc.sql("""
@@ -113,6 +129,10 @@ public class InterviewService {
 
     public static String questionLookupQuery() {
         return QUESTION_LOOKUP_QUERY;
+    }
+
+    public static String progressionQuery() {
+        return "position < :totalQuestions";
     }
 
     /**
@@ -154,7 +174,7 @@ public class InterviewService {
 
     @Transactional
     public AnswerResponse answer(UUID sessionId, UUID instanceId, String token, String answer) {
-        session(sessionId, token);
+        SessionRow session = session(sessionId, token);
         String normalized = normalizeAnswer(answer);
         QuestionRow question = jdbc.sql("""
             UPDATE session_question SET status = 'EVALUATING'
@@ -184,14 +204,14 @@ public class InterviewService {
             .param("strengths", evaluation.strengthsJson()).param("improvements", evaluation.improvementsJson()).param("score", evaluation.score())
             .param("adapter", adapter).param("model", model).update();
         jdbc.sql("UPDATE session_question SET status = 'EVALUATED', accepted_at = now() WHERE id = :id").param("id", question.id()).update();
-        if (question.position() < 3) {
+        if (question.position() < session.totalQuestions()) {
             jdbc.sql("UPDATE session_question SET status = 'ACTIVE' WHERE session_id = :sessionId AND position = :position AND status = 'LOCKED'")
                 .param("sessionId", sessionId).param("position", question.position() + 1).update();
         } else {
             jdbc.sql("UPDATE interview_session SET state = 'REPORT_READY' WHERE id = :sessionId").param("sessionId", sessionId).update();
         }
         return new AnswerResponse(question.position(), evaluation.score(), evaluation.strengths(), evaluation.improvements(),
-            question.position() < 3 ? current(sessionId, token) : null);
+            question.position() < session.totalQuestions() ? current(sessionId, token) : null);
     }
 
     private InterviewException answerConflict(UUID sessionId, UUID instanceId) {

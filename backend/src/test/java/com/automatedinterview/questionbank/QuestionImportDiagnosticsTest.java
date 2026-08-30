@@ -52,4 +52,11 @@ class QuestionImportDiagnosticsTest {
         assertEquals("What is PostgreSQL?", QuestionImportService.removeTextListPrefix("2) What is PostgreSQL?"));
         assertEquals("Explain Docker.", QuestionImportService.removeTextListPrefix("- Explain Docker."));
     }
+
+    @Test
+    void draftImportCapacityAllowsUpdatesButRejectsNewQuestionsAtTheLimit() {
+        assertTrue(QuestionImportService.hasCapacity(10_000, 0, true, 10_000));
+        assertTrue(!QuestionImportService.hasCapacity(10_000, 0, false, 10_000));
+        assertTrue(QuestionImportService.hasCapacity(9_999, 0, false, 10_000));
+    }
 }

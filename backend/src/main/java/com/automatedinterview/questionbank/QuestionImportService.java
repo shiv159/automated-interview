@@ -3,6 +3,7 @@ package com.automatedinterview.questionbank;
 import com.automatedinterview.catalog.SkillCatalog;
 import com.automatedinterview.catalog.SkillCatalogService;
 import com.automatedinterview.ai.VertexQuestionEnricher;
+import com.automatedinterview.config.QuestionLimitsProperties;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
@@ -33,11 +34,13 @@ public class QuestionImportService {
     private final VertexQuestionEnricher enricher;
     private final SkillCatalogService catalog;
     private final String enrichmentProfile;
+    private final QuestionLimitsProperties.QuestionBank limits;
 
     public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, SkillCatalogService catalog, ObjectMapper json,
-        @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile) {
+        @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile, QuestionLimitsProperties properties) {
         this.jdbc = jdbc; this.enricher = enricher; this.catalog = catalog; this.json = json;
         this.enrichmentProfile = enrichmentProfile;
+        this.limits = properties.questionBank();
     }
 
     @Transactional
@@ -61,7 +64,7 @@ public class QuestionImportService {
             catch (VertexQuestionEnricher.ProviderUnavailable exception) { throw new ImportException("QUESTION_ENRICHMENT_UNAVAILABLE", 503); }
             String hash = hash(stem);
             boolean exists = jdbc.sql("SELECT count(*) FROM question WHERE content_hash = :hash").param("hash", hash).query(Long.class).single() > 0;
-            if (!exists && bankSize + created >= 1000) throw new ImportException("QUESTION_BANK_LIMIT_REACHED", 409);
+            if (!exists && bankSize + created >= limits.maxTotalQuestions()) throw new ImportException("QUESTION_BANK_LIMIT_REACHED", 409);
             UUID id = exists ? jdbc.sql("SELECT id FROM question WHERE content_hash = :hash").param("hash", hash).query(UUID.class).single() : UUID.randomUUID();
             String tags = json(enrichment.tags());
             List<String> enrichmentSecondary = enrichment.secondarySkills().isEmpty() ? item.secondarySkills() : enrichment.secondarySkills();
@@ -136,7 +139,7 @@ public class QuestionImportService {
             value = value.replace("\r\n", "\n").replace('\r', '\n');
             if ((file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".json")) || value.stripLeading().startsWith("[")) {
                 JsonNode root = json.readTree(value);
-                if (root == null || !root.isArray() || root.isEmpty() || root.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
+                if (root == null || !root.isArray() || root.isEmpty() || root.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
                 List<ImportItem> items = new ArrayList<>(); List<ImportDiagnostic> errors = new ArrayList<>(); Set<String> seen = new HashSet<>();
                 for (int index = 0; index < root.size(); index++) {
                     try {
@@ -170,20 +173,21 @@ public class QuestionImportService {
                     items.add(new ImportItem(stem, null, null, null, List.of()));
                 } catch (ImportException exception) { errors.add(exception.withContext(null, index + 1, exception.field(), exception.hint()).diagnostic()); }
             }
-            if (items.isEmpty() || items.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
+            if (items.isEmpty() || items.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
             return new ParseBatch(items, errors);
         } catch (ImportException exception) { throw exception; }
         catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
     }
 
     public ImportResponse importDraft(DraftImportRequest request) {
-        if (request == null || request.questions() == null || request.questions().size() > 10) throw new ImportException("INVALID_QUESTION_DRAFT", 400);
+        if (request == null || request.questions() == null || request.questions().size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_DRAFT", 400);
         List<ApprovedSkill> approvedSkills = request.approvedSkills() == null ? List.of() : request.approvedSkills();
         Set<String> approvedIds = approvedSkills.stream().map(ApprovedSkill::id).collect(java.util.stream.Collectors.toSet());
         int created = 0, updated = 0, skipped = 0;
         List<QuestionBankController.QuestionSummary> summaries = new ArrayList<>();
         List<ImportDiagnostic> errors = new ArrayList<>();
         Set<String> seenStems = new HashSet<>();
+        int bankSize = jdbc.sql("SELECT count(*) FROM question").query(Integer.class).single();
         for (int index = 0; index < request.questions().size(); index++) {
             DraftQuestion item = request.questions().get(index);
             try {
@@ -213,6 +217,7 @@ public class QuestionImportService {
                     }
                 }
                 boolean exists = jdbc.sql("SELECT count(*) FROM question WHERE content_hash = :hash").param("hash", hash(stem)).query(Long.class).single() > 0;
+                if (!hasCapacity(bankSize, created, exists, limits.maxTotalQuestions())) throw new ImportException("QUESTION_BANK_LIMIT_REACHED", 409);
                 UUID id = exists ? jdbc.sql("SELECT id FROM question WHERE content_hash = :hash").param("hash", hash(stem)).query(UUID.class).single() : UUID.randomUUID();
                 jdbc.sql("""
                     INSERT INTO question (id, content_hash, stem, type, primary_skill, secondary_skills, difficulty, tags, rubric, ideal_answer, origin, status, source_hash, enrichment_provenance)
@@ -234,6 +239,10 @@ public class QuestionImportService {
             }
         }
         return new ImportResponse(created, updated, skipped, summaries, errors);
+    }
+
+    public static boolean hasCapacity(int bankSize, int created, boolean exists, int maxTotal) {
+        return exists || bankSize + created < maxTotal;
     }
 
     private void validateDraftFields(DraftQuestion item) {
@@ -311,7 +320,7 @@ public class QuestionImportService {
                 lines.add(new ImportItem(normalized, null, null, null, List.of()));
             }
             if (!errors.isEmpty()) throw ImportException.batch(errors);
-            if (lines.isEmpty() || lines.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
+            if (lines.isEmpty() || lines.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
             return lines;
         } catch (ImportException exception) { throw exception; }
         catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
@@ -320,7 +329,7 @@ public class QuestionImportService {
     private List<ImportItem> normalizeJson(String value) {
         try {
             JsonNode root = json.readTree(value);
-            if (root == null || !root.isArray() || root.isEmpty() || root.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
+            if (root == null || !root.isArray() || root.isEmpty() || root.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
             List<ImportItem> items = new ArrayList<>(); List<ImportDiagnostic> errors = new ArrayList<>(); Set<String> seen = new HashSet<>();
             for (int itemIndex = 0; itemIndex < root.size(); itemIndex++) {
                 JsonNode node = root.get(itemIndex);

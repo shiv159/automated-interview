@@ -68,17 +68,18 @@
     </div>
     <section class="panel explorer" aria-label="Question bank explorer">
       <div class="explorer-search"><input class="search" type="search"
-          placeholder="🔍  Search questions by keyword or skill..." [(ngModel)]="searchTerm" name="search"><span>Showing
-          <b>{{ filteredQuestions.length }}</b> of {{ rows.questions.length }}</span></div>
+          placeholder="🔍  Search questions by keyword or skill..." [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="search"><span>Showing
+          <b>{{ filteredQuestions.length }}</b> of {{ rows.total }}</span></div>
       <div class="filter-row"><b>SKILL:</b>@for (skill of skillOptions; track skill) {<button type="button"
-          [class.active]="skillFilter === skill" (click)="skillFilter = skill">{{ displaySkill(skill) }}</button>}</div>
+          [class.active]="skillFilter === skill" (click)="skillFilter = skill; applyFilters()">{{ displaySkill(skill) }}</button>}</div>
       <div class="filter-row"><b>TIER:</b>@for (level of ['ALL','EASY','MEDIUM','HARD']; track level) {<button
-          type="button" [class.active]="difficultyFilter === level" (click)="difficultyFilter = level">{{ level ===
+          type="button" [class.active]="difficultyFilter === level" (click)="difficultyFilter = level; applyFilters()">{{ level ===
           'ALL' ? 'All Tiers' : level }}</button>}</div>
       <div class="filter-row"><b>SOURCE:</b>@for (origin of ['ALL','SEED','OWNER_IMPORT']; track origin) {<button
-          type="button" [class.active]="originFilter === origin" (click)="originFilter = origin">{{ origin === 'ALL' ?
+          type="button" [class.active]="originFilter === origin" (click)="originFilter = origin; applyFilters()">{{ origin === 'ALL' ?
           'All Sources' : origin.replace('_', ' ') }}</button>}</div>
     </section>
+    <div class="pagination"><button type="button" (click)="changePage(-1)" [disabled]="page() === 0">Previous</button><span>Page {{ page() + 1 }} of {{ rows.totalPages }}</span><button type="button" (click)="changePage(1)" [disabled]="page() + 1 >= rows.totalPages">Next</button></div>
     <section class="panel question-table" aria-label="Question bank rows">
       <div class="table-head"><span>Question stem</span><span>Coverage &amp;
           level</span><span>Origin</span><span>Actions</span></div>@for (question of filteredQuestions; track
