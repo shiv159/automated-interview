@@ -11,7 +11,7 @@
           type="password"
           placeholder="Enter API key…"
           [value]="keyInput()"
-          (input)="keyInput.set($any($event.target).value)"
+          (input)="keyInput.set(inputValue($event))"
           autocomplete="current-password"
           autofocus
         />

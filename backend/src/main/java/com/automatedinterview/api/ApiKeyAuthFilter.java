@@ -1,4 +1,4 @@
-﻿package com.automatedinterview.api;
+package com.automatedinterview.api;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -29,11 +29,6 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     private final String expectedKey;
 
     public ApiKeyAuthFilter(@Value("${app.question-bank.api-key:}") String apiKey) {
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException(
-                "QUESTION_BANK_API_KEY is not set. "
-            );
-        }
         this.expectedKey = apiKey;
     }
 
@@ -46,6 +41,14 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+        if (expectedKey == null || expectedKey.isBlank()) {
+            log.error("QUESTION_BANK_API_KEY is not configured on server.");
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"Unauthorized\"}");
+            return;
+        }
+
         String provided = request.getHeader(HEADER);
         if (!expectedKey.equals(provided)) {
             log.warn("question_bank_auth_rejected method={} path={} ip={}",
