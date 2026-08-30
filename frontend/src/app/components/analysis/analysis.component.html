@@ -1,0 +1,129 @@
+<main class="shell">
+  <header class="topbar">
+    <a class="brand" routerLink="/"
+      ><img class="brand-logo" src="logo.svg" alt="Intervu" /><span
+        class="brand-sub"
+        >practice lab</span
+      ></a
+    >
+    <nav class="nav">
+      <a class="active" routerLink="/">Candidate review</a
+      ><a routerLink="/question-bank">Question bank</a>
+    </nav>
+    <span class="status-chip"><i></i> Private workspace</span>
+  </header>
+  <section class="analysis-page page">
+    @if (busy() && !session()) {
+      <section class="panel loading-panel" aria-live="polite">
+        <p class="kicker">Step 2 of 2</p>
+        <h1>Analyzing your materials…</h1>
+        <p class="lede">
+          Finding evidence, matching skills, and preparing targeted interview
+          questions.
+        </p>
+        <div class="loading-bar" aria-hidden="true"></div>
+      </section>
+    }
+    @if (message()) {
+      <p class="status" aria-live="polite">{{ message() }}</p>
+    }
+    @if (session(); as current) {
+      <p class="eyebrow">
+        {{ current.roleTitle || "Candidate review" }}
+        <span>Analysis ready</span>
+      </p>
+      <h1>Review the evidence.</h1>
+      <div class="result-grid">
+        <article class="metric-card">
+          <span class="metric-label">Profile match</span
+          ><strong>{{ current.profileMatch }}%</strong
+          ><small>Role alignment</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Difficulty</span
+          ><strong>{{ current.difficulty }}</strong
+          ><small>Recommended level</small>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">Skills matched</span
+          ><strong>{{ current.matchedSkills.length }}</strong
+          ><small>Matched skills</small>
+        </article>
+      </div>
+      <section class="evidence" aria-label="Skill evidence summary">
+        <h2>Skill evidence</h2>
+        <article>
+          <h3>Matched skills</h3>
+          @for (claim of claims("matched"); track claim.skillId) {
+            <p>
+              <strong>{{ claim.skillId }}</strong>
+              <span class="tag">{{ claim.importance }}</span> · “{{
+                claim.evidence
+              }}”
+            </p>
+          } @empty {
+            <p>No matched skills.</p>
+          }
+        </article>
+        <article>
+          <h3>Missing requirements</h3>
+          @for (claim of claims("missing"); track claim.skillId) {
+            <p>
+              <strong>{{ claim.skillId }}</strong>
+              <span class="tag">{{ claim.importance }}</span> · “{{
+                claim.evidence
+              }}”
+            </p>
+          } @empty {
+            <p>No missing supported skills.</p>
+          }
+        </article>
+        <article>
+          <h3>Additional candidate skills</h3>
+          @for (claim of claims("additional"); track claim.skillId) {
+            <p>
+              <strong>{{ claim.skillId }}</strong> · “{{ claim.evidence }}”
+            </p>
+          } @empty {
+            <p>No additional supported skills found.</p>
+          }
+        </article>
+        @if (current.unsupportedJobSkills.length) {
+          <article>
+            <h3>Unsupported requirements</h3>
+            <p>
+              Not included in the profile score:
+              {{ current.unsupportedJobSkills.join(", ") }}.
+            </p>
+          </article>
+        }
+      </section>
+      @if (
+        current.softSkillRequirements.length ||
+        current.domainRequirements.length
+      ) {
+        <section class="evidence" aria-label="Additional requirements">
+          <h2>Additional requirements</h2>
+          <p>
+            {{
+              current.softSkillRequirements
+                .concat(current.domainRequirements)
+                .join(", ")
+            }}
+          </p>
+        </section>
+      }
+      <div class="actions analysis-actions">
+        <a class="secondary-button" routerLink="/">Start over</a
+        ><button
+          class="primary-button"
+          type="button"
+          (click)="startInterview()"
+          [disabled]="busy()"
+        >
+          {{ busy() ? "Preparing…" : "Start interview ↗" }}
+        </button>
+      </div>
+    }
+  </section>
+</main>

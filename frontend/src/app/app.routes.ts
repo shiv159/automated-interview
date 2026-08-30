@@ -11,8 +11,8 @@ export const routes: Routes = [
   {
     path: "sessions/:id/analysis",
     loadComponent: () =>
-      import("./components/candidate-review/candidate-review.component").then(
-        (m) => m.CandidateReviewComponent,
+      import("./components/analysis/analysis.component").then(
+        (m) => m.AnalysisComponent,
       ),
   },
   {

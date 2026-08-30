@@ -1,0 +1,55 @@
+:host {
+  display: block;
+}
+.analysis-page {
+  max-width: 960px;
+}
+.loading-panel {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: clamp(28px, 6vw, 64px);
+  text-align: center;
+}
+.loading-panel h1 {
+  margin-bottom: 16px;
+  font-size: clamp(36px, 6vw, 60px);
+}
+.loading-panel .lede {
+  margin: 0 auto;
+}
+.loading-bar {
+  height: 3px;
+  margin-top: 32px;
+  overflow: hidden;
+  background: var(--color-graphite);
+}
+.loading-bar::after {
+  display: block;
+  width: 40%;
+  height: 100%;
+  content: "";
+  background: var(--accent);
+  animation: loading 1.2s ease-in-out infinite;
+}
+.analysis-page > h1 {
+  margin-bottom: 32px;
+}
+.analysis-actions {
+  margin-top: 24px;
+}
+.secondary-button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 16px;
+  color: var(--soft);
+  text-decoration: none;
+  font-size: 14px;
+}
+@keyframes loading {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}

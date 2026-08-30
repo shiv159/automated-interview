@@ -70,6 +70,14 @@ test('candidate review exposes job, resume-only, and unsupported skill evidence'
   assert.match(template, /unsupportedJobSkills/);
 });
 
+test('analysis is a separate focused view and action buttons share spacing', () => {
+  assert.match(template, /components\/analysis\/analysis\.component/);
+  const candidateReview = fs.readFileSync('src/app/components/candidate-review/candidate-review.component.html', 'utf8');
+  assert.match(candidateReview, /Start candidate review/);
+  assert.match(styles, /\.primary-button, button\[type=submit\]/);
+  assert.match(styles, /\.primary-button[^}]*padding:\s*10px 16px/);
+});
+
 test('known API failures have actionable frontend messages', () => {
   for (const code of ['ATTESTATION_REQUIRED', 'NO_SUPPORTED_SKILLS', 'INVALID_ANSWER', 'AI_PROVIDER_UNAVAILABLE', 'SKILL_ANALYSIS_UNCERTAIN', 'SKILL_ANALYSIS_INVALID', 'SKILL_EVIDENCE_INVALID', 'REPORT_NOT_READY']) {
     assert.match(template, new RegExp(`${code}\\s*:`));

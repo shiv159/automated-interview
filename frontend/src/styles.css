@@ -49,7 +49,7 @@ h3 { color: var(--soft); font-size: 15px; font-weight: var(--font-weight-medium)
 .panel-heading, .section-head, .actions, .answer-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .panel-heading h2 { margin: 0; }
 .kicker { color: var(--color-acid-lime); }
-.primary-button, button[type=submit] { min-height: 42px; border: 0; border-radius: 6px; padding: 10px 16px; color: var(--color-void); background: var(--accent); font-size: 14px; font-weight: var(--font-weight-medium); letter-spacing: -.011em; }
+.primary-button, button[type=submit] { min-height: 42px; margin: 0; border: 0; border-radius: 6px; padding: 10px 16px; color: var(--color-void); background: var(--accent); font-size: 14px; font-weight: var(--font-weight-medium); line-height: 1.25; letter-spacing: -.011em; }
 .primary-button:hover, button[type=submit]:hover { background: #f0fb58; }
 .ghost-button, .actions button:not(.primary-button), .row-actions button, .question-modal button { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; color: var(--soft); background: transparent; font-size: 13px; }
 .ghost-button:hover, .actions button:not(.primary-button):hover, .row-actions button:hover, .question-modal button:hover { border-color: var(--color-smoke); color: var(--text); background: rgba(255, 255, 255, .04); }
