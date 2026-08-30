@@ -11,10 +11,10 @@ public class QuestionBankRepository {
             SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty,
                    tags, rubric, ideal_answer, updated_at
             FROM question
-            WHERE (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
-              AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
-              AND (:difficulty IS NULL OR difficulty = :difficulty)
-              AND (:origin IS NULL OR origin = :origin)
+            WHERE (CAST(:search AS text) IS NULL OR LOWER(stem) LIKE LOWER(CAST(:search AS text)))
+              AND (CAST(:skill AS text) IS NULL OR primary_skill = CAST(:skill AS text) OR (CAST(:skill AS text) = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+              AND (CAST(:difficulty AS text) IS NULL OR difficulty = CAST(:difficulty AS text))
+              AND (CAST(:origin AS text) IS NULL OR origin = CAST(:origin AS text))
             ORDER BY origin, type, primary_skill NULLS LAST, difficulty NULLS LAST, id
             LIMIT :size OFFSET :offset
             """;
@@ -35,10 +35,10 @@ public class QuestionBankRepository {
     public long countQuestions(Filter filter) {
         return jdbc.sql("""
                 SELECT count(*) FROM question
-                WHERE (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
-                  AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
-                  AND (:difficulty IS NULL OR difficulty = :difficulty)
-                  AND (:origin IS NULL OR origin = :origin)
+                WHERE (CAST(:search AS text) IS NULL OR LOWER(stem) LIKE LOWER(CAST(:search AS text)))
+                  AND (CAST(:skill AS text) IS NULL OR primary_skill = CAST(:skill AS text) OR (CAST(:skill AS text) = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+                  AND (CAST(:difficulty AS text) IS NULL OR difficulty = CAST(:difficulty AS text))
+                  AND (CAST(:origin AS text) IS NULL OR origin = CAST(:origin AS text))
                 """).params(filter.params(0, 0)).query(Long.class).single();
     }
 
@@ -46,10 +46,10 @@ public class QuestionBankRepository {
         return jdbc.sql("""
                 SELECT count(*) FROM question
                 WHERE status = 'ACTIVE'
-                  AND (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
-                  AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
-                  AND (:difficulty IS NULL OR difficulty = :difficulty)
-                  AND (:origin IS NULL OR origin = :origin)
+                  AND (CAST(:search AS text) IS NULL OR LOWER(stem) LIKE LOWER(CAST(:search AS text)))
+                  AND (CAST(:skill AS text) IS NULL OR primary_skill = CAST(:skill AS text) OR (CAST(:skill AS text) = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+                  AND (CAST(:difficulty AS text) IS NULL OR difficulty = CAST(:difficulty AS text))
+                  AND (CAST(:origin AS text) IS NULL OR origin = CAST(:origin AS text))
                 """).params(filter.params(0, 0)).query(Long.class).single();
     }
 
@@ -57,10 +57,10 @@ public class QuestionBankRepository {
         return jdbc.sql("""
                 SELECT count(DISTINCT CASE WHEN type = 'BEHAVIORAL' THEN 'BEHAVIORAL' ELSE primary_skill END)
                 FROM question
-                WHERE (:search IS NULL OR LOWER(stem) LIKE LOWER(:search))
-                  AND (:skill IS NULL OR primary_skill = :skill OR (:skill = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
-                  AND (:difficulty IS NULL OR difficulty = :difficulty)
-                  AND (:origin IS NULL OR origin = :origin)
+                WHERE (CAST(:search AS text) IS NULL OR LOWER(stem) LIKE LOWER(CAST(:search AS text)))
+                  AND (CAST(:skill AS text) IS NULL OR primary_skill = CAST(:skill AS text) OR (CAST(:skill AS text) = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
+                  AND (CAST(:difficulty AS text) IS NULL OR difficulty = CAST(:difficulty AS text))
+                  AND (CAST(:origin AS text) IS NULL OR origin = CAST(:origin AS text))
                 """).params(filter.params(0, 0)).query(Long.class).single();
     }
 
