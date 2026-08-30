@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { Injectable, inject } from "@angular/core";
+import { HttpClient } from "@angular/common/http";
+import { firstValueFrom } from "rxjs";
 
 export interface Session {
   id: string;
@@ -17,14 +17,19 @@ export interface Session {
   resumeSkills: SkillClaim[];
 }
 
-export interface SkillClaim { skillId: string; importance: string; evidence: string; matched: boolean; }
+export interface SkillClaim {
+  skillId: string;
+  importance: string;
+  evidence: string;
+  matched: boolean;
+}
 
 export interface Question {
   instanceId: string;
   position: number;
   totalQuestions: number;
   roleTitle: string;
-  type: 'TECHNICAL' | 'BEHAVIORAL';
+  type: "TECHNICAL" | "BEHAVIORAL";
   primarySkill?: string | null;
   difficulty?: string | null;
   stem: string;
@@ -34,7 +39,7 @@ export interface Question {
 
 export interface Evaluation {
   position: number;
-  type: 'TECHNICAL' | 'BEHAVIORAL';
+  type: "TECHNICAL" | "BEHAVIORAL";
   primarySkill?: string | null;
   stem: string;
   criteria: string;
@@ -44,7 +49,11 @@ export interface Evaluation {
   criteriaScores?: CriterionScore[];
 }
 
-export interface CriterionScore { criterion: string; score: number; feedback?: string; }
+export interface CriterionScore {
+  criterion: string;
+  score: number;
+  feedback?: string;
+}
 
 export interface Report {
   sessionId: string;
@@ -66,48 +75,90 @@ export interface Report {
   domainRequirements?: string[];
 }
 
-@Injectable({ providedIn: 'root' })
+@Injectable({ providedIn: "root" })
 export class SessionService {
   private http = inject(HttpClient);
 
-  async createSession(jobFile: File, resumeFile: File, yearsExperience: number, syntheticDataAttested: boolean, roleTitle = ''): Promise<Session> {
+  async createSession(
+    jobFile: File,
+    resumeFile: File,
+    yearsExperience: number,
+    syntheticDataAttested: boolean,
+    roleTitle = "",
+  ): Promise<Session> {
     const body = new FormData();
-    body.append('jobDescription', jobFile);
-    body.append('resume', resumeFile);
-    body.append('yearsExperience', String(yearsExperience));
-    body.append('syntheticDataAttested', String(syntheticDataAttested));
-    body.append('roleTitle', roleTitle);
-    
-    return firstValueFrom(this.http.post<Session>('/api/v1/sessions', body, { withCredentials: true }));
+    body.append("jobDescription", jobFile);
+    body.append("resume", resumeFile);
+    body.append("yearsExperience", String(yearsExperience));
+    body.append("syntheticDataAttested", String(syntheticDataAttested));
+    body.append("roleTitle", roleTitle);
+
+    return firstValueFrom(
+      this.http.post<Session>("/api/v1/sessions", body, {
+        withCredentials: true,
+      }),
+    );
   }
 
   async getSession(id: string): Promise<Session> {
-    return firstValueFrom(this.http.get<Session>(`/api/v1/sessions/${id}`, { withCredentials: true }));
+    return firstValueFrom(
+      this.http.get<Session>(`/api/v1/sessions/${id}`, {
+        withCredentials: true,
+      }),
+    );
   }
 
   async startInterview(sessionId: string): Promise<Question> {
-    return firstValueFrom(this.http.post<Question>(`/api/v1/sessions/${sessionId}/interview`, {}, { withCredentials: true }));
+    return firstValueFrom(
+      this.http.post<Question>(
+        `/api/v1/sessions/${sessionId}/interview`,
+        {},
+        { withCredentials: true },
+      ),
+    );
   }
 
-  async submitAnswer(sessionId: string, instanceId: string, answerText: string): Promise<{ nextQuestion: Question | null }> {
-    return firstValueFrom(this.http.post<{ nextQuestion: Question | null }>(
-      `/api/v1/sessions/${sessionId}/questions/${instanceId}/answers`,
-      { answer: answerText },
-      { withCredentials: true }
-    ));
+  async submitAnswer(
+    sessionId: string,
+    instanceId: string,
+    answerText: string,
+  ): Promise<{ nextQuestion: Question | null }> {
+    return firstValueFrom(
+      this.http.post<{ nextQuestion: Question | null }>(
+        `/api/v1/sessions/${sessionId}/questions/${instanceId}/answers`,
+        { answer: answerText },
+        { withCredentials: true },
+      ),
+    );
   }
 
-  async previewDocument(file: File): Promise<{ text: string; truncated: boolean; documentType: string }> {
+  async previewDocument(
+    file: File,
+  ): Promise<{ text: string; truncated: boolean; documentType: string }> {
     const body = new FormData();
-    body.append('file', file);
-    return firstValueFrom(this.http.post<{ text: string; truncated: boolean; documentType: string }>('/api/v1/documents/preview', body));
+    body.append("file", file);
+    return firstValueFrom(
+      this.http.post<{
+        text: string;
+        truncated: boolean;
+        documentType: string;
+      }>("/api/v1/documents/preview", body),
+    );
   }
 
   async getReport(sessionId: string): Promise<Report> {
-    return firstValueFrom(this.http.get<Report>(`/api/v1/sessions/${sessionId}/report`, { withCredentials: true }));
+    return firstValueFrom(
+      this.http.get<Report>(`/api/v1/sessions/${sessionId}/report`, {
+        withCredentials: true,
+      }),
+    );
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    return firstValueFrom(this.http.delete<void>(`/api/v1/sessions/${sessionId}`, { withCredentials: true }));
+    return firstValueFrom(
+      this.http.delete<void>(`/api/v1/sessions/${sessionId}`, {
+        withCredentials: true,
+      }),
+    );
   }
 }
