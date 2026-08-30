@@ -5,7 +5,7 @@ import com.automatedinterview.analysis.SkillClaim;
 import com.automatedinterview.ai.VertexAnswerEvaluator;
 import com.automatedinterview.ai.QuestionRetrievalService;
 import com.automatedinterview.document.DocumentNormalizer;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;

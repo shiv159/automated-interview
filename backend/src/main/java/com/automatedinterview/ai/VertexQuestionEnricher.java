@@ -1,12 +1,11 @@
 package com.automatedinterview.ai;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -143,9 +142,7 @@ public class VertexQuestionEnricher {
     }
 
     private static void rejectUnknownProperties(JsonNode value) {
-        Iterator<String> fieldNames = value.fieldNames();
-        while (fieldNames.hasNext()) {
-            String fieldName = fieldNames.next();
+        for (String fieldName : value.propertyNames()) {
             if (!EXPECTED_FIELDS.contains(fieldName)) throw validation("unknown_property");
         }
         for (String fieldName : EXPECTED_FIELDS) {
