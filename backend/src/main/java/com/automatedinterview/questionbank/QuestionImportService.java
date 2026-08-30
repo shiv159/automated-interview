@@ -103,6 +103,10 @@ public class QuestionImportService {
         for (int index = 0; index < items.size(); index++) {
             ImportItem item = items.get(index);
             int questionIndex = index + 1;
+            if (questionExists(item.stem())) {
+                questions.add(new AnalysisQuestion(item.stem(), null, null, List.of(), null, List.of(), null, "DUPLICATE", "QUESTION_ALREADY_EXISTS"));
+                continue;
+            }
             try {
                 VertexQuestionEnricher.Enrichment value = enricher.discover(item.stem(), catalog.activeSkills());
                 String primary = normalizeSkillId(value.skill());
@@ -115,6 +119,11 @@ public class QuestionImportService {
             }
         }
         return new AnalysisResponse(questions, List.copyOf(suggestions.values()), parsed.errors());
+    }
+
+    private boolean questionExists(String stem) {
+        return jdbc.sql("SELECT count(*) FROM question WHERE content_hash = :hash")
+            .param("hash", hash(stem)).query(Long.class).single() > 0;
     }
 
     private ParseBatch normalizeLenient(MultipartFile file) {

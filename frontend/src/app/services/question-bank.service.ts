@@ -10,7 +10,7 @@ export interface QuestionSummary {
 export interface CoverageBucket { type: string; primarySkill: string | null; difficulty: string | null; status: string; count: number; }
 export interface SkillOption { id: string; displayName: string; aliases: string[]; }
 export interface QuestionBank { questions: QuestionSummary[]; total: number; activeCount: number; skillAreaCount: number; coverage: CoverageBucket[]; skills?: SkillOption[]; }
-export interface AnalysisQuestion { stem: string; type: 'TECHNICAL' | 'BEHAVIORAL' | null; primarySkill: string | null; secondarySkills: string[]; difficulty: string | null; tags: string[]; idealAnswer: string | null; status: 'VALID' | 'INVALID' | 'RETRYABLE'; errorCode: string | null; }
+export interface AnalysisQuestion { stem: string; type: 'TECHNICAL' | 'BEHAVIORAL' | null; primarySkill: string | null; secondarySkills: string[]; difficulty: string | null; tags: string[]; idealAnswer: string | null; status: 'VALID' | 'INVALID' | 'RETRYABLE' | 'DUPLICATE'; errorCode: string | null; }
 export interface SkillSuggestion { id: string; displayName: string; aliases: string[]; questionIndexes: number[]; approved?: boolean; }
 export interface QuestionAnalysis { questions: AnalysisQuestion[]; newSkills: SkillSuggestion[]; errors: { line?: number; item?: number; message: string }[]; }
 
