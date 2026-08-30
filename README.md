@@ -140,6 +140,28 @@ Compose and the frontend is available on `127.0.0.1:4200`.
 
 Health check: `http://127.0.0.1:4200/api/health`
 
+### Google Cloud deployment secrets
+
+The Cloud Run deployment workflow reads database credentials and the question-bank API key from Google Secret Manager. Create the secrets once in the target project and grant the Cloud Run runtime service account access:
+
+```powershell
+gcloud secrets create automated-interview-database-url --replication-policy=automatic
+gcloud secrets create automated-interview-database-username --replication-policy=automatic
+gcloud secrets create automated-interview-database-password --replication-policy=automatic
+gcloud secrets create automated-interview-question-bank-api-key --replication-policy=automatic
+
+"<database-url>" | gcloud secrets versions add automated-interview-database-url --data-file=-
+"<database-username>" | gcloud secrets versions add automated-interview-database-username --data-file=-
+"<database-password>" | gcloud secrets versions add automated-interview-database-password --data-file=-
+"<question-bank-api-key>" | gcloud secrets versions add automated-interview-question-bank-api-key --data-file=-
+
+gcloud secrets add-iam-policy-binding automated-interview-database-url `
+  --member="serviceAccount:<cloud-run-runtime-service-account>" `
+  --role="roles/secretmanager.secretAccessor"
+```
+
+Repeat the final IAM command for the other three secrets. The runtime service account—not the GitHub Actions identity—must have `roles/secretmanager.secretAccessor`. Do not put secret values in workflow YAML, GitHub command arguments, or committed `.env` files.
+
 Candidate routes are `/`, `/sessions/:id/analysis`,
 `/sessions/:id/interview`, and `/sessions/:id/report`. The owner question-bank
 route is `/question-bank`.
