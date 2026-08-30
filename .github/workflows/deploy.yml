@@ -79,6 +79,23 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT_ID }}
 
+      - name: Synchronize GitHub secrets to Secret Manager
+        env:
+          DATABASE_URL: ${{ secrets.SPRING_DATASOURCE_URL }}
+          DATABASE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
+          DATABASE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
+          QUESTION_BANK_API_KEY: ${{ secrets.QUESTION_BANK_API_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL"
+          test -n "$DATABASE_USERNAME"
+          test -n "$DATABASE_PASSWORD"
+          test -n "$QUESTION_BANK_API_KEY"
+          printf '%s' "$DATABASE_URL" | gcloud secrets versions add automated-interview-database-url --project "$GCP_PROJECT_ID" --data-file=-
+          printf '%s' "$DATABASE_USERNAME" | gcloud secrets versions add automated-interview-database-username --project "$GCP_PROJECT_ID" --data-file=-
+          printf '%s' "$DATABASE_PASSWORD" | gcloud secrets versions add automated-interview-database-password --project "$GCP_PROJECT_ID" --data-file=-
+          printf '%s' "$QUESTION_BANK_API_KEY" | gcloud secrets versions add automated-interview-question-bank-api-key --project "$GCP_PROJECT_ID" --data-file=-
+
       - name: Configure Docker auth
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
 
