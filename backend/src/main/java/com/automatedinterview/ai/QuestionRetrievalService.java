@@ -16,6 +16,14 @@ import io.micrometer.core.instrument.MeterRegistry;
 @Service
 public class QuestionRetrievalService {
     private static final double MIN_SCORE = 0.15;
+    private static final String LEXICAL_QUERY = """
+            SELECT id, ts_rank(to_tsvector('simple', stem), plainto_tsquery('simple', :query)) AS rank
+            FROM question WHERE status = 'ACTIVE' AND indexing_status = 'INDEXED'
+              AND type = :type AND (CAST(:skill AS text) IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))
+              AND (CAST(:difficulty AS text) IS NULL OR difficulty = :difficulty)
+              AND to_tsvector('simple', stem) @@ plainto_tsquery('simple', :query)
+            ORDER BY rank DESC LIMIT 10
+            """;
     private final VectorStore vectorStore;
     private final JdbcClient jdbc;
     private final MeterRegistry meters;
@@ -43,24 +51,17 @@ public class QuestionRetrievalService {
             } catch (RuntimeException ignored) { }
         }
         if (!scores.isEmpty()) {
-            String skillClause = skill == null ? "" : " AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill))";
+            String skillClause = skill == null ? "" : " AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))";
             List<UUID> compatible = jdbc.sql("""
                 SELECT id FROM question
                 WHERE id IN (:candidateIds) AND status = 'ACTIVE' AND indexing_status = 'INDEXED'
                   AND type = :type
-                """ + skillClause + " AND (:difficulty::text IS NULL OR difficulty = :difficulty)")
+                """ + skillClause + " AND (CAST(:difficulty AS text) IS NULL OR difficulty = :difficulty)")
                 .param("candidateIds", scores.keySet()).param("type", type).param("skill", skill)
                 .param("difficulty", difficulty).query(UUID.class).list();
             scores.keySet().retainAll(Set.copyOf(compatible));
         }
-        jdbc.sql("""
-            SELECT id, ts_rank(to_tsvector('simple', stem), plainto_tsquery('simple', :query)) AS rank
-            FROM question WHERE status = 'ACTIVE' AND indexing_status = 'INDEXED'
-              AND type = :type AND (:skill::text IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill))
-              AND (:difficulty::text IS NULL OR difficulty = :difficulty)
-              AND to_tsvector('simple', stem) @@ plainto_tsquery('simple', :query)
-            ORDER BY rank DESC LIMIT 10
-            """).param("query", query).param("type", type).param("skill", skill).param("difficulty", difficulty)
+        jdbc.sql(LEXICAL_QUERY).param("query", query).param("type", type).param("skill", skill).param("difficulty", difficulty)
             .query((rs, row) -> Map.entry(rs.getObject("id", UUID.class), rs.getDouble("rank"))).list()
             .forEach(entry -> { if (!excluded.contains(entry.getKey())) scores.merge(entry.getKey(), entry.getValue() * .15, Double::sum); });
         UUID result = scores.entrySet().stream().max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(null);
@@ -68,6 +69,10 @@ public class QuestionRetrievalService {
         if (result == null) meters.counter("automated_interview.retrieval.empty", "type", type).increment();
         sample.stop(meters.timer("automated_interview.retrieval.latency", "type", type));
         return result;
+    }
+
+    static String lexicalQuery() {
+        return LEXICAL_QUERY;
     }
 
     public String context(String query, UUID excludedId) {
