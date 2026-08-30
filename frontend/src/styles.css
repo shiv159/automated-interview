@@ -23,7 +23,8 @@ a { color: var(--soft); }
 .shell { max-width: 1200px; min-height: 100vh; margin: 0 auto; padding: 20px 24px 48px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 56px; padding: 8px 12px 8px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--color-carbon); }
 .brand { display: flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none; font-size: 16px; font-weight: var(--font-weight-medium); letter-spacing: -.022em; }
-.brand-mark { display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--color-smoke); border-radius: 6px; color: var(--color-void); background: var(--accent); font-family: ui-monospace, monospace; font-size: 11px; font-weight: var(--font-weight-strong); letter-spacing: -.08em; }
+.brand-logo { display: block; width: 122px; height: 24px; }
+.brand-mark { display: block; width: 28px; height: 28px; border-radius: 6px; background: url('favicon.svg') center / cover no-repeat; font-size: 0; }
 .brand-word { color: var(--text); }
 .brand-sub { margin-left: 2px; color: var(--muted); font-size: 10px; font-weight: var(--font-weight-regular); letter-spacing: .06em; text-transform: uppercase; }
 .nav { display: flex; gap: 2px; }
