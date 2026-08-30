@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class InterviewService {
     private static final Pattern WORDS = Pattern.compile("[^\\p{L}\\p{Nd}]+");
+    private static final String QUESTION_LOOKUP_QUERY = "SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash FROM question WHERE id = :id AND status = 'ACTIVE' AND (CAST(:skill AS text) IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text))) AND (CAST(:difficulty AS text) IS NULL OR difficulty = :difficulty)";
     private final JdbcClient jdbc;
     private final VertexAnswerEvaluator vertexEvaluator;
     private final String evaluationProfile;
@@ -106,8 +107,12 @@ public class InterviewService {
     }
 
     private QuestionRow loadQuestion(UUID id, String skill, String difficulty) {
-        return jdbc.sql("SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash FROM question WHERE id = :id AND status = 'ACTIVE' AND (:skill::text IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill)) AND (:difficulty::text IS NULL OR difficulty = :difficulty)")
+        return jdbc.sql(QUESTION_LOOKUP_QUERY)
             .param("id", id).param("skill", skill).param("difficulty", difficulty).query(this::question).optional().orElse(null);
+    }
+
+    public static String questionLookupQuery() {
+        return QUESTION_LOOKUP_QUERY;
     }
 
     /**
@@ -131,8 +136,8 @@ public class InterviewService {
             SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash
             FROM question
             WHERE id = :id AND status = 'ACTIVE'
-              AND (:skill::text IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(:skill))
-              AND (:difficulty::text IS NULL OR difficulty = :difficulty)
+              AND (CAST(:skill AS text) IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))
+              AND (CAST(:difficulty AS text) IS NULL OR difficulty = :difficulty)
             """)
             .param("id", questionId)
             .param("skill", expectedSkill)
