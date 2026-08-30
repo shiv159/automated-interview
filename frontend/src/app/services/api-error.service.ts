@@ -2,8 +2,9 @@ import { Injectable } from "@angular/core";
 
 @Injectable({ providedIn: "root" })
 export class ApiErrorService {
-  message(error: any, fallback: string): string {
-    const code = error?.error?.code ?? error?.error?.title;
+  message(error: unknown, fallback: string): string {
+    const payload = this.payload(error);
+    const code = payload?.code ?? payload?.title;
     const messages: Record<string, string> = {
       SESSION_EXPIRED: "This session has expired. Start a new review.",
       SESSION_NOT_FOUND:
@@ -53,11 +54,11 @@ export class ApiErrorService {
       REPORT_NOT_READY:
         "Finish all interview questions before opening the coaching report.",
     };
-    const mapped = messages[code];
-    const diagnostics = Array.isArray(error?.error?.errors)
-      ? error.error.errors
+    const mapped = code ? messages[code] : undefined;
+    const diagnostics = Array.isArray(payload?.errors)
+      ? payload.errors
           .slice(0, 3)
-          .map((item: any) => {
+          .map((item) => {
             const location = item.line
               ? `line ${item.line}`
               : item.item
@@ -67,9 +68,39 @@ export class ApiErrorService {
           })
           .join(" ")
       : "";
-    const hint = error?.error?.hint ? ` ${error.error.hint}` : "";
+    const hint = payload?.hint ? ` ${payload.hint}` : "";
     return mapped
       ? `${mapped}${diagnostics ? ` ${diagnostics}` : hint}`
-      : (error?.error?.detail ?? error?.message ?? fallback);
+      : (payload?.detail ?? this.messageOf(error) ?? fallback);
   }
+
+  private payload(error: unknown): ApiProblem | null {
+    if (!this.isRecord(error) || !this.isRecord(error["error"])) return null;
+    return error["error"] as ApiProblem;
+  }
+
+  private messageOf(error: unknown): string | undefined {
+    return this.isRecord(error) && typeof error["message"] === "string"
+      ? error["message"] as string
+      : undefined;
+  }
+
+  private isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null;
+  }
+}
+
+interface ApiProblem {
+  code?: string;
+  title?: string;
+  detail?: string;
+  hint?: string;
+  errors?: Array<{
+    line?: number;
+    item?: number;
+    field?: string;
+    hint?: string;
+    message?: string;
+    code?: string;
+  }>;
 }

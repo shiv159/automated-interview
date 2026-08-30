@@ -59,6 +59,13 @@ export interface QuestionAnalysis {
   newSkills: SkillSuggestion[];
   errors: { line?: number; item?: number; message: string }[];
 }
+export interface ImportResponse {
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  questions: QuestionSummary[];
+  errors: unknown[];
+}
 
 @Injectable({ providedIn: "root" })
 export class QuestionBankService {
@@ -71,30 +78,18 @@ export class QuestionBankService {
     return {
       ...response,
       activeCount: response.questions.filter(
-        (item: any) => item.status === "ACTIVE",
+        (item) => item.status === "ACTIVE",
       ).length,
     };
   }
 
   async importQuestions(
     file: File,
-  ): Promise<{
-    createdCount: number;
-    updatedCount: number;
-    skippedCount: number;
-    questions: QuestionSummary[];
-    errors: unknown[];
-  }> {
+  ): Promise<ImportResponse> {
     const body = new FormData();
     body.append("questionsFile", file);
     return firstValueFrom(
-      this.http.post<{
-        createdCount: number;
-        updatedCount: number;
-        skippedCount: number;
-        questions: QuestionSummary[];
-        errors: unknown[];
-      }>("/api/v1/question-bank/import", body),
+      this.http.post<ImportResponse>("/api/v1/question-bank/import", body),
     );
   }
 
@@ -109,9 +104,9 @@ export class QuestionBankService {
   async importDraft(payload: {
     questions: AnalysisQuestion[];
     approvedSkills: SkillSuggestion[];
-  }): Promise<any> {
+  }): Promise<ImportResponse> {
     return firstValueFrom(
-      this.http.post("/api/v1/question-bank/import-draft", {
+      this.http.post<ImportResponse>("/api/v1/question-bank/import-draft", {
         questions: payload.questions.map(
           ({
             stem,

@@ -28,15 +28,15 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class QuestionImportService {
     private static final Logger log = LoggerFactory.getLogger(QuestionImportService.class);
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private final ObjectMapper json;
     private final JdbcClient jdbc;
     private final VertexQuestionEnricher enricher;
     private final SkillCatalogService catalog;
     private final String enrichmentProfile;
 
-    public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, SkillCatalogService catalog,
+    public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, SkillCatalogService catalog, ObjectMapper json,
         @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile) {
-        this.jdbc = jdbc; this.enricher = enricher; this.catalog = catalog;
+        this.jdbc = jdbc; this.enricher = enricher; this.catalog = catalog; this.json = json;
         this.enrichmentProfile = enrichmentProfile;
     }
 
@@ -135,7 +135,7 @@ public class QuestionImportService {
             if (value.startsWith("\ufeff")) value = value.substring(1);
             value = value.replace("\r\n", "\n").replace('\r', '\n');
             if ((file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".json")) || value.stripLeading().startsWith("[")) {
-                JsonNode root = JSON.readTree(value);
+                JsonNode root = json.readTree(value);
                 if (root == null || !root.isArray() || root.isEmpty() || root.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
                 List<ImportItem> items = new ArrayList<>(); List<ImportDiagnostic> errors = new ArrayList<>(); Set<String> seen = new HashSet<>();
                 for (int index = 0; index < root.size(); index++) {
@@ -319,7 +319,7 @@ public class QuestionImportService {
 
     private List<ImportItem> normalizeJson(String value) {
         try {
-            JsonNode root = JSON.readTree(value);
+            JsonNode root = json.readTree(value);
             if (root == null || !root.isArray() || root.isEmpty() || root.size() > 10) throw new ImportException("INVALID_QUESTION_FILE", 400);
             List<ImportItem> items = new ArrayList<>(); List<ImportDiagnostic> errors = new ArrayList<>(); Set<String> seen = new HashSet<>();
             for (int itemIndex = 0; itemIndex < root.size(); itemIndex++) {
@@ -392,7 +392,7 @@ public class QuestionImportService {
     }
 
     private String json(Object value) {
-        try { return JSON.writeValueAsString(value); }
+        try { return json.writeValueAsString(value); }
         catch (Exception exception) { throw new IllegalStateException("Unable to serialize question metadata", exception); }
     }
 

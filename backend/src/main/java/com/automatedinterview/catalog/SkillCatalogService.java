@@ -9,10 +9,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SkillCatalogService {
-    private static final ObjectMapper JSON = new ObjectMapper();
     private final JdbcClient jdbc;
+    private final ObjectMapper json;
 
-    public SkillCatalogService(JdbcClient jdbc) { this.jdbc = jdbc; }
+    public SkillCatalogService(JdbcClient jdbc, ObjectMapper json) { this.jdbc = jdbc; this.json = json; }
 
     public List<SkillCatalog.Skill> activeSkills() {
         return jdbc.sql("SELECT id, display_name, aliases, active, catalog_version, source FROM skill WHERE active = true ORDER BY id")
@@ -42,12 +42,12 @@ public class SkillCatalogService {
     }
 
     private List<String> aliases(String value) {
-        try { return JSON.readValue(value, new TypeReference<List<String>>() { }); }
+        try { return json.readValue(value, new TypeReference<List<String>>() { }); }
         catch (Exception exception) { throw new IllegalStateException("Invalid skill aliases", exception); }
     }
 
     private String json(List<String> values) {
-        try { return JSON.writeValueAsString(values); }
+        try { return json.writeValueAsString(values); }
         catch (Exception exception) { throw new IllegalStateException("Unable to serialize aliases", exception); }
     }
 }

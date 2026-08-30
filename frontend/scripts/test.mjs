@@ -22,6 +22,9 @@ const template = getCodeContents('src');
 const styles = fs.readFileSync('src/styles.css', 'utf8');
 const reportStyles = fs.readFileSync('src/app/components/report/report.component.scss', 'utf8');
 const nginx = fs.readFileSync('nginx.conf', 'utf8');
+const frontendCode = getCodeContents('src');
+const sessionServiceCode = fs.readFileSync('../backend/src/main/java/com/automatedinterview/session/SessionService.java', 'utf8');
+const vectorSyncCode = fs.readFileSync('../backend/src/main/java/com/automatedinterview/ai/VectorSyncService.java', 'utf8');
 
 test('candidate and owner journeys expose required routes and actions', () => {
   for (const value of ['/question-bank', '/sessions/', '/interview', '/report']) {
@@ -52,7 +55,7 @@ test('deployed feature fixes are represented in the frontend contract usage', ()
   assert.match(template, /roleTitle/);
   assert.match(template, /totalQuestions/);
   assert.match(template, /completionPercent/);
-  assert.match(template, /primarySkill \?\? 'BEHAVIORAL'/);
+  assert.match(template, /primarySkill \?\? ["']BEHAVIORAL["']/);
   assert.match(template, /idealAnswer/);
   assert.match(template, /interviewScore \| number:'1\.0-1' }}(?:<span>)?\/100/);
   assert.match(template, /api\/v1\/documents\/preview/);
@@ -71,7 +74,7 @@ test('known API failures have actionable frontend messages', () => {
   for (const code of ['ATTESTATION_REQUIRED', 'NO_SUPPORTED_SKILLS', 'INVALID_ANSWER', 'AI_PROVIDER_UNAVAILABLE', 'SKILL_ANALYSIS_UNCERTAIN', 'SKILL_ANALYSIS_INVALID', 'SKILL_EVIDENCE_INVALID', 'REPORT_NOT_READY']) {
     assert.match(template, new RegExp(`${code}\\s*:`));
   }
-  assert.match(template, /error\.error\.errors/);
+  assert.match(template, /errors/);
   assert.match(template, /item\.hint/);
 });
 
@@ -92,4 +95,18 @@ test('report export includes JSON and CSV output with print rules', () => {
   assert.match(template, /Download JSON \+ CSV/);
   assert.match(template, /text\/csv/);
   assert.match(reportStyles, /@media print/);
+});
+
+test('application code uses explicit frontend types and shared backend JSON handling', () => {
+  assert.doesNotMatch(frontendCode, /\bany\b/);
+  assert.doesNotMatch(sessionServiceCode, /new\s+ObjectMapper\s*\(/);
+  assert.doesNotMatch(sessionServiceCode, /return\s+"\["\s*\+/);
+  assert.doesNotMatch(vectorSyncCode, /new\s+com\.fasterxml\.jackson\.databind\.ObjectMapper\s*\(/);
+});
+
+test('controllers keep persistence behind application services', () => {
+  const questionBankController = fs.readFileSync('../backend/src/main/java/com/automatedinterview/questionbank/QuestionBankController.java', 'utf8');
+  const sessionLifecycleController = fs.readFileSync('../backend/src/main/java/com/automatedinterview/session/SessionLifecycleController.java', 'utf8');
+  assert.doesNotMatch(questionBankController, /JdbcClient|\.sql\(/);
+  assert.doesNotMatch(sessionLifecycleController, /JdbcClient|\.sql\(|private\s+SessionState\s+find\s*\(/);
 });

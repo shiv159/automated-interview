@@ -8,6 +8,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -35,13 +37,15 @@ public class VectorSyncService {
 
     private final VectorStore vectorStore;
     private final JdbcClient jdbc;
+    private final ObjectMapper objectMapper;
     @Value("${VERTEX_EMBEDDING_MODEL:text-embedding-005}") private String embeddingModel;
     @Value("${APP_EMBEDDING_PROFILE:local}") private String embeddingProfile;
     @Value("${app.ai.embedding-dimensions:768}") private int embeddingDimensions;
 
-    public VectorSyncService(VectorStore vectorStore, JdbcClient jdbc) {
+    public VectorSyncService(VectorStore vectorStore, JdbcClient jdbc, ObjectMapper objectMapper) {
         this.vectorStore = vectorStore;
         this.jdbc = jdbc;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -142,8 +146,7 @@ public class VectorSyncService {
 
     private List<String> parseJsonArray(String value) {
         try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(value == null ? "[]" : value,
-                new com.fasterxml.jackson.core.type.TypeReference<List<String>>() { });
+            return objectMapper.readValue(value == null ? "[]" : value, new TypeReference<List<String>>() { });
         } catch (Exception exception) {
             throw new IllegalArgumentException("Invalid question metadata array", exception);
         }

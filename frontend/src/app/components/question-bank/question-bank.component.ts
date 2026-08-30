@@ -125,7 +125,7 @@ export class QuestionBankComponent implements OnInit {
       this.message.set(
         "Review the detected skills, then import valid questions.",
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Import failed."));
     } finally {
       this.busy.set(false);
@@ -147,7 +147,7 @@ export class QuestionBankComponent implements OnInit {
       this.message.set(
         "Analysis retried. Review the results before importing.",
       );
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Analysis retry failed."));
     } finally {
       this.busy.set(false);
@@ -170,7 +170,7 @@ export class QuestionBankComponent implements OnInit {
       this.draft.set([]);
       this.suggestions.set([]);
       await this.loadBank();
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Import failed."));
     } finally {
       this.busy.set(false);
@@ -194,7 +194,7 @@ export class QuestionBankComponent implements OnInit {
     try {
       await this.questionBankService.toggleStatus(question);
       await this.loadBank();
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Status update failed."));
     } finally {
       this.busy.set(false);
@@ -204,6 +204,14 @@ export class QuestionBankComponent implements OnInit {
   copyQuestion(question: QuestionSummary) {
     navigator.clipboard?.writeText(question.stem);
     this.message.set("Question copied to clipboard.");
+  }
+
+  selectedFile(event: Event): File | null {
+    return (event.target as HTMLInputElement).files?.[0] ?? null;
+  }
+
+  inputValue(event: Event): string {
+    return (event.target as HTMLInputElement).value;
   }
 
   exportQuestions(format: "json" | "csv") {

@@ -11,6 +11,35 @@ import { Router, RouterLink } from "@angular/router";
 import { ApiErrorService } from "../../services/api-error.service";
 import { SessionService, Question } from "../../services/session.service";
 
+interface SpeechRecognitionResultEvent {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResult>;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionLike;
+}
+
+interface SpeechWindow extends Window {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+}
+
 @Component({
   selector: "app-interview",
   standalone: true,
@@ -33,7 +62,7 @@ export class InterviewComponent implements OnInit, OnDestroy {
   listening = false;
   showStar = false;
   private timerId?: number;
-  private recognition: any;
+  private recognition?: SpeechRecognitionLike;
   private dictationBase = "";
   private finalizedTranscript = "";
   private interimTranscript = "";
@@ -47,7 +76,7 @@ export class InterviewComponent implements OnInit, OnDestroy {
     this.busy.set(true);
     try {
       this.question.set(await this.sessionService.startInterview(this.id));
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Interview unavailable."));
     } finally {
       this.busy.set(false);
@@ -109,9 +138,9 @@ export class InterviewComponent implements OnInit, OnDestroy {
       .trim();
   }
   toggleDictation() {
+    const speechWindow = window as SpeechWindow;
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition;
+      speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       this.message.set("Speech input is not supported in this browser.");
       return;
@@ -129,7 +158,7 @@ export class InterviewComponent implements OnInit, OnDestroy {
     this.recognition = new SpeechRecognition();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
-    this.recognition.onresult = (event: any) => {
+    this.recognition.onresult = (event: SpeechRecognitionResultEvent) => {
       let finalText = "";
       let interimText = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -192,7 +221,7 @@ export class InterviewComponent implements OnInit, OnDestroy {
         this.question.set(null);
         this.router.navigate(["/sessions", this.id, "report"]);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Answer unavailable."));
     } finally {
       this.busy.set(false);

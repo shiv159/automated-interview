@@ -1,7 +1,7 @@
 import { Component, inject, signal, Input, OnInit } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { Router, RouterLink } from "@angular/router";
-import { SessionService, Session } from "../../services/session.service";
+import { SessionService, Session, SkillClaim } from "../../services/session.service";
 import { ApiErrorService } from "../../services/api-error.service";
 
 @Component({
@@ -41,7 +41,7 @@ export class CandidateReviewComponent implements OnInit {
       }
     }
   }
-  evidenceText(claim: any): string {
+  evidenceText(claim: SkillClaim): string {
     return claim?.evidence ?? "";
   }
   loadDemo() {
@@ -102,18 +102,18 @@ export class CandidateReviewComponent implements OnInit {
       ? `${Math.max(1, Math.round(file.size / 1024))} KB`
       : `${(file.size / 1024 / 1024).toFixed(1)} MB`;
   }
-  get filteredClaims(): any[] {
+  get filteredClaims(): SkillClaim[] {
     const session = this.result();
     if (!session) return [];
     return session.jobSkills.filter(
-      (claim: any) =>
+      (claim) =>
         this.skillFilter === "ALL" ||
         (this.skillFilter === "MATCHED"
           ? session.matchedSkills.includes(claim.skillId)
           : session.missingSkills.includes(claim.skillId)),
     );
   }
-  get matchedClaims(): any[] {
+  get matchedClaims(): SkillClaim[] {
     const session = this.result();
     return session
       ? session.jobSkills.filter((claim) =>
@@ -121,7 +121,7 @@ export class CandidateReviewComponent implements OnInit {
         )
       : [];
   }
-  get missingClaims(): any[] {
+  get missingClaims(): SkillClaim[] {
     const session = this.result();
     return session
       ? session.jobSkills.filter((claim) =>
@@ -129,7 +129,7 @@ export class CandidateReviewComponent implements OnInit {
         )
       : [];
   }
-  get additionalClaims(): any[] {
+  get additionalClaims(): SkillClaim[] {
     const session = this.result();
     if (!session) return [];
     const jobIds = new Set(session.jobSkills.map((claim) => claim.skillId));
@@ -176,7 +176,7 @@ export class CandidateReviewComponent implements OnInit {
       this.result.set(session);
       this.router.navigate(["/sessions", session.id, "analysis"]);
       this.message.set("Your materials were analyzed.");
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Session creation failed."));
     } finally {
       this.busy.set(false);
@@ -189,7 +189,7 @@ export class CandidateReviewComponent implements OnInit {
     try {
       await this.sessionService.startInterview(session.id);
       this.router.navigate(["/sessions", session.id, "interview"]);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Interview unavailable."));
     } finally {
       this.busy.set(false);

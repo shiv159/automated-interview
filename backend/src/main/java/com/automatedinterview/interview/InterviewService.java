@@ -22,18 +22,18 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class InterviewService {
-    private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern WORDS = Pattern.compile("[^\\p{L}\\p{Nd}]+");
     private final JdbcClient jdbc;
     private final VertexAnswerEvaluator vertexEvaluator;
     private final String evaluationProfile;
     private final VectorStore vectorStore;
     private final QuestionRetrievalService retrieval;
+    private final ObjectMapper json;
 
     public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator, VectorStore vectorStore,
-        QuestionRetrievalService retrieval,
+        QuestionRetrievalService retrieval, ObjectMapper json,
         @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile) {
-        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.vectorStore = vectorStore; this.retrieval = retrieval;
+        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.vectorStore = vectorStore; this.retrieval = retrieval; this.json = json;
         this.evaluationProfile = evaluationProfile;
     }
 
@@ -263,11 +263,11 @@ public class InterviewService {
         return normalized;
     }
 
-    private String json(List<String> values) { return "[" + values.stream().map(value -> "\"" + value.replace("\"", "\\\"") + "\"").reduce((a, b) -> a + "," + b).orElse("") + "]"; }
-    private String criteriaJson(List<com.automatedinterview.ai.VertexAnswerEvaluator.CriterionScore> values) { try { return JSON.writeValueAsString(values); } catch (Exception exception) { throw new IllegalStateException("Unable to serialize criterion scores", exception); } }
-    private List<CriterionScore> parseCriteriaScores(String value) { try { return value == null ? List.of() : JSON.readValue(value, JSON.getTypeFactory().constructCollectionType(List.class, CriterionScore.class)); } catch (Exception exception) { return List.of(); } }
+    private String json(List<String> values) { try { return json.writeValueAsString(values); } catch (Exception exception) { throw new IllegalStateException("Unable to serialize evaluation values", exception); } }
+    private String criteriaJson(List<com.automatedinterview.ai.VertexAnswerEvaluator.CriterionScore> values) { try { return json.writeValueAsString(values); } catch (Exception exception) { throw new IllegalStateException("Unable to serialize criterion scores", exception); } }
+    private List<CriterionScore> parseCriteriaScores(String value) { try { return value == null ? List.of() : json.readValue(value, json.getTypeFactory().constructCollectionType(List.class, CriterionScore.class)); } catch (Exception exception) { return List.of(); } }
     private List<SkillClaim> claims(UUID sessionId, String documentType) { return jdbc.sql("SELECT skill_id, importance, evidence, matched FROM session_skill WHERE session_id = :id AND document_type = :type ORDER BY skill_id").param("id", sessionId).param("type", documentType).query((rs, row) -> new SkillClaim(rs.getString("skill_id"), rs.getString("importance"), rs.getString("evidence"), rs.getBoolean("matched"))).list(); }
-    private List<String> parseJsonList(String value) { try { return value == null ? List.of() : JSON.readValue(value, JSON.getTypeFactory().constructCollectionType(List.class, String.class)); } catch (Exception exception) { return List.of(); } }
+    private List<String> parseJsonList(String value) { try { return value == null ? List.of() : json.readValue(value, json.getTypeFactory().constructCollectionType(List.class, String.class)); } catch (Exception exception) { return List.of(); } }
 
     private String guidance(QuestionRow question) {
         if ("BEHAVIORAL".equals(question.type())) return "Use a specific situation, your task, the actions you took, the result, and what you learned.";

@@ -16,7 +16,7 @@
     </div>
     <form class="panel import-panel" (ngSubmit)="importQuestions()" novalidate><label>Import custom question stems<input
           type="file" accept=".txt,.json,text/plain,application/json"
-          (change)="ownerFile = $any($event.target).files?.[0] ?? null"></label><button class="primary-button"
+          (change)="ownerFile = selectedFile($event)"></label><button class="primary-button"
         type="submit" [disabled]="busy()">{{ busy() ? 'Analyzing…' : 'Analyze questions ↥' }}</button></form>
     <p class="status" aria-live="polite">{{ message() }}</p>
     @if (suggestions().length) {<section class="panel import-review">
@@ -25,7 +25,7 @@
       {<label><input type="checkbox" [checked]="skill.approved" (change)="toggleSuggestion(skill)"> <input
           [(ngModel)]="skill.displayName" [name]="'skill-name-' + skill.id" aria-label="Skill display name"> <input
           [value]="skill.aliases.join(', ')" [name]="'skill-aliases-' + skill.id" aria-label="Skill aliases"
-          (input)="updateSuggestionAliases(skill, $any($event.target).value)"></label>}
+              (input)="updateSuggestionAliases(skill, inputValue($event))"></label>}
     </section>}
     @if (draft().length) {<section class="panel import-review">
       <h2>Question preview</h2>@for (question of draft(); track $index) {<article><strong>{{ question.stem

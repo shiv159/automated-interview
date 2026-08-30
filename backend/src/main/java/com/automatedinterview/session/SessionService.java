@@ -4,6 +4,8 @@ import com.automatedinterview.analysis.SkillClaim;
 import com.automatedinterview.analysis.VertexSkillAnalyzer;
 import com.automatedinterview.document.DocumentNormalizer;
 import com.automatedinterview.document.DocumentTextExtractor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
@@ -27,11 +29,16 @@ public class SessionService {
     private final DocumentTextExtractor extractor;
     private final VertexSkillAnalyzer analyzer;
     private final JdbcClient jdbc;
+    private final ObjectMapper objectMapper;
+    private final SessionRepository repository;
 
-    public SessionService(DocumentTextExtractor extractor, VertexSkillAnalyzer analyzer, JdbcClient jdbc) {
+    public SessionService(DocumentTextExtractor extractor, VertexSkillAnalyzer analyzer, JdbcClient jdbc,
+                          ObjectMapper objectMapper, SessionRepository repository) {
         this.extractor = extractor;
         this.analyzer = analyzer;
         this.jdbc = jdbc;
+        this.objectMapper = objectMapper;
+        this.repository = repository;
     }
 
     @Transactional
@@ -97,6 +104,15 @@ public class SessionService {
         return new SessionResponse(id, row.expiresAt(), row.roleTitle(), row.difficulty(), row.profileMatch(), job, resume, matched, missing, parseJsonList(row.unsupportedRequirements()), parseJsonList(row.softSkillRequirements()), parseJsonList(row.domainRequirements()));
     }
 
+    public void delete(UUID id, String token) {
+        if (token == null || token.isBlank()) {
+            throw new SessionInputException("INVALID_SESSION_TOKEN");
+        }
+        if (!repository.deleteOwned(id, hash(token))) {
+            throw new SessionInputException("SESSION_NOT_FOUND");
+        }
+    }
+
     private List<SkillClaim> claims(UUID id, String documentType) {
         return jdbc.sql("SELECT skill_id, importance, evidence, matched FROM session_skill WHERE session_id = :id AND document_type = :documentType ORDER BY skill_id")
             .param("id", id).param("documentType", documentType)
@@ -138,8 +154,21 @@ public class SessionService {
     }
 
     public record CreatedSession(SessionResponse response, String token) { }
-    private String json(List<String> values) { return "[" + values.stream().map(value -> "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"").reduce((a, b) -> a + "," + b).orElse("") + "]"; }
-    private List<String> parseJsonList(String value) { try { return value == null ? List.of() : new com.fasterxml.jackson.databind.ObjectMapper().readValue(value, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() { }); } catch (Exception exception) { return List.of(); } }
+    private String json(List<String> values) {
+        try {
+            return objectMapper.writeValueAsString(values);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to serialize session requirements", exception);
+        }
+    }
+
+    private List<String> parseJsonList(String value) {
+        try {
+            return value == null ? List.of() : objectMapper.readValue(value, new TypeReference<List<String>>() { });
+        } catch (Exception exception) {
+            return List.of();
+        }
+    }
     private record SessionRow(UUID id, String difficulty, double profileMatch, Instant expiresAt, String roleTitle, String unsupportedRequirements, String softSkillRequirements, String domainRequirements) { }
 
     private String normalizeRoleTitle(String value) {

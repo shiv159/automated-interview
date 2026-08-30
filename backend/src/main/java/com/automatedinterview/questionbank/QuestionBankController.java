@@ -3,7 +3,6 @@ package com.automatedinterview.questionbank;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import com.automatedinterview.catalog.SkillCatalog;
 import com.automatedinterview.catalog.SkillCatalogService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -13,7 +12,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -21,11 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/question-bank")
 public class QuestionBankController {
-    private final JdbcClient jdbc;
+    private final QuestionBankRepository repository;
     private final QuestionImportService imports;
     private final SkillCatalogService catalog;
 
-    public QuestionBankController(JdbcClient jdbc, QuestionImportService imports, SkillCatalogService catalog) { this.jdbc = jdbc; this.imports = imports; this.catalog = catalog; }
+    public QuestionBankController(QuestionBankRepository repository, QuestionImportService imports, SkillCatalogService catalog) { this.repository = repository; this.imports = imports; this.catalog = catalog; }
 
     @PostMapping("/import")
     public ResponseEntity<QuestionImportService.ImportResponse> importQuestions(@RequestParam MultipartFile questionsFile) {
@@ -51,17 +49,8 @@ public class QuestionBankController {
 
     @GetMapping
     public QuestionBankResponse list() {
-        List<QuestionSummary> questions = jdbc.sql("""
-            SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty, tags, rubric, ideal_answer, updated_at
-            FROM question ORDER BY origin, type, primary_skill NULLS LAST, difficulty NULLS LAST, id
-            """).query((rs, row) -> new QuestionSummary(rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"),
-                rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"),
-                rs.getString("rubric"), rs.getString("ideal_answer"), rs.getTimestamp("updated_at").toInstant())).list();
-        List<CoverageBucket> coverage = jdbc.sql("""
-            SELECT type, primary_skill, difficulty, status, count(*) AS total
-            FROM question GROUP BY type, primary_skill, difficulty, status
-            ORDER BY type, primary_skill NULLS LAST, difficulty NULLS LAST, status
-            """).query((rs, row) -> new CoverageBucket(rs.getString("type"), rs.getString("primary_skill"), rs.getString("difficulty"), rs.getString("status"), rs.getLong("total"))).list();
+        List<QuestionSummary> questions = repository.listQuestions();
+        List<CoverageBucket> coverage = repository.coverage();
         long active = questions.stream().filter(item -> item.status().equals("ACTIVE")).count();
         long skillAreaCount = questions.stream().map(item -> item.primarySkill() == null ? "BEHAVIORAL" : item.primarySkill()).distinct().count();
         List<SkillOption> skills = catalog.activeSkills().stream().map(skill -> new SkillOption(skill.id(), skill.displayName(), skill.aliases())).toList();

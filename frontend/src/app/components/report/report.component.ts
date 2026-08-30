@@ -36,7 +36,7 @@ export class ReportComponent implements OnInit {
     this.busy.set(true);
     try {
       this.report.set(await this.sessionService.getReport(this.id));
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Report unavailable."));
     } finally {
       this.busy.set(false);
@@ -211,7 +211,7 @@ export class ReportComponent implements OnInit {
       await this.sessionService.deleteSession(this.id);
       this.report.set(null);
       this.router.navigate(["/"]);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.message.set(this.apiErrors.message(e, "Failed to delete session."));
     } finally {
       this.busy.set(false);
