@@ -1,6 +1,7 @@
 app:
   question-bank:
     seed-enabled: ${APP_QUESTION_BANK_SEED_ENABLED:false}
+    api-key: ${QUESTION_BANK_API_KEY:}
   embedding:
     profile: ${APP_EMBEDDING_PROFILE:local}
   ai:

@@ -1,3 +1,28 @@
+@if (showKeyModal()) {
+  <div class="key-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
+    <div class="key-modal">
+      <div class="key-modal-icon">🔒</div>
+      <h2 id="key-modal-title">Admin Access Required</h2>
+      <p>Enter your Question Bank API key to unlock this workspace.</p>
+      <form (ngSubmit)="submitKey()" novalidate>
+        <input
+          id="admin-key-input"
+          class="key-input"
+          type="password"
+          placeholder="Enter API key…"
+          [value]="keyInput()"
+          (input)="keyInput.set($any($event.target).value)"
+          autocomplete="current-password"
+          autofocus
+        />
+        @if (keyError()) {
+          <p class="key-error" role="alert">{{ keyError() }}</p>
+        }
+        <button class="primary-button key-submit" type="submit">Unlock →</button>
+      </form>
+    </div>
+  </div>
+}
 <main class="shell">
   <header class="topbar"><a class="brand" routerLink="/"><span class="brand-mark">iv</span><span
         class="brand-word">Intervu</span><span class="brand-sub">practice lab</span></a>

@@ -2,7 +2,9 @@ import { Component, inject, signal, OnInit } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import { FormsModule } from "@angular/forms";
+import { HttpErrorResponse } from "@angular/common/http";
 import { ApiErrorService } from "../../services/api-error.service";
+import { AdminKeyService } from "../../services/admin-key.service";
 import {
   AnalysisQuestion,
   QuestionBank,
@@ -21,11 +23,19 @@ import {
 export class QuestionBankComponent implements OnInit {
   private questionBankService = inject(QuestionBankService);
   private apiErrors = inject(ApiErrorService);
+  private adminKey = inject(AdminKeyService);
+
   readonly busy = signal(false);
   readonly message = signal("");
   readonly bank = signal<QuestionBank | null>(null);
   readonly draft = signal<AnalysisQuestion[]>([]);
   readonly suggestions = signal<SkillSuggestion[]>([]);
+
+  // Admin key modal
+  readonly showKeyModal = signal(false);
+  readonly keyInput = signal("");
+  readonly keyError = signal("");
+
   ownerFile: File | null = null;
   searchTerm = "";
   skillFilter = "ALL";
@@ -34,7 +44,23 @@ export class QuestionBankComponent implements OnInit {
   selectedQuestion: QuestionSummary | null = null;
 
   async ngOnInit() {
-    await this.loadBank();
+    if (!this.adminKey.hasKey()) {
+      this.showKeyModal.set(true);
+    } else {
+      await this.loadBank();
+    }
+  }
+
+  submitKey() {
+    const key = this.keyInput().trim();
+    if (!key) {
+      this.keyError.set("Please enter an API key.");
+      return;
+    }
+    this.adminKey.setKey(key);
+    this.showKeyModal.set(false);
+    this.keyError.set("");
+    this.loadBank();
   }
 
   async loadBank() {
@@ -42,7 +68,13 @@ export class QuestionBankComponent implements OnInit {
       this.bank.set(await this.questionBankService.getBank());
     } catch (e) {
       this.bank.set(null);
-      this.message.set(this.apiErrors.message(e, "Question bank unavailable."));
+      if (e instanceof HttpErrorResponse && e.status === 401) {
+        this.keyError.set("Invalid key — try again.");
+        this.keyInput.set("");
+        this.showKeyModal.set(true);
+      } else {
+        this.message.set(this.apiErrors.message(e, "Question bank unavailable."));
+      }
     }
   }
 
