@@ -7,3 +7,4 @@ output/
 .playwright-cli/
 .idea/
 *.iml
+.worktrees/
