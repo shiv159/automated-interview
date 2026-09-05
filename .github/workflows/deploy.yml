@@ -2,7 +2,10 @@ name: deploy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - "codex*"
+      - "codex/**"
   workflow_dispatch:
 
 env:
