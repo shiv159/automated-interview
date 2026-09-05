@@ -41,6 +41,7 @@ public class QuestionIndexingPublisher {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void publishAfterCommit(QuestionIndexingRequested request) {
+        log.info("Kafka indexing event ready after commit questionId={} operation={}", request.questionId(), request.operation());
         publishNow(new QuestionIndexingEvent(request.questionId(), request.operation()));
     }
 
@@ -51,10 +52,14 @@ public class QuestionIndexingPublisher {
         }
         try {
             String payload = json.writeValueAsString(event);
-            kafka.send(properties.topic(), event.questionId().toString(), payload)
+            log.info("Publishing Kafka indexing event questionId={} operation={} topic={}", event.questionId(), event.operation(), properties.topic());
+            var result = kafka.send(properties.topic(), event.questionId().toString(), payload)
                 .get(SEND_TIMEOUT.toMillis(), java.util.concurrent.TimeUnit.MILLISECONDS);
+            log.info("Kafka indexing event published questionId={} operation={} topic={} partition={} offset={}",
+                event.questionId(), event.operation(), properties.topic(), result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
         } catch (Exception exception) {
-            log.error("Could not publish question indexing event for {}", event.questionId(), exception);
+            log.error("Could not publish Kafka indexing event questionId={} operation={} topic={} cause={}",
+                event.questionId(), event.operation(), properties.topic(), exception.getMessage(), exception);
             throw new QuestionIndexingPublishException("Could not publish question indexing event", exception);
         }
     }

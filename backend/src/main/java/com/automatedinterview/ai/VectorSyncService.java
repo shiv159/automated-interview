@@ -59,15 +59,18 @@ public class VectorSyncService {
     @Transactional
     public void upsert(UUID questionId, String stem, String type,
                        String primarySkill, String difficulty, String secondarySkills, String tags, String status) {
+        log.info("Starting vector upsert questionId={} type={} primarySkill={} embeddingProfile={}", questionId, type, primarySkill, embeddingProfile);
         Document document = buildDocument(questionId, stem, type, primarySkill, difficulty, secondarySkills, tags, status);
         // Delete first (no-op if the row does not exist), then add the new vector.
         try {
             vectorStore.delete(List.of(questionId.toString()));
         } catch (Exception e) {
+            log.error("VectorStore delete before upsert failed questionId={} cause={}", questionId, e.getMessage(), e);
             throw new VectorSyncException("Failed to remove existing vector for question " + questionId, e);
         }
         try {
             vectorStore.add(List.of(document));
+            log.info("Completed vector upsert questionId={}", questionId);
         } catch (Exception e) {
             log.error("VectorStore add failed for question {}. The vector is now missing.", questionId, e);
             throw new VectorSyncException("Failed to add vector for question " + questionId, e);
@@ -79,9 +82,12 @@ public class VectorSyncService {
      * A missing row is treated as a no-op.
      */
     public void delete(UUID questionId) {
+        log.info("Starting vector delete questionId={}", questionId);
         try {
             vectorStore.delete(List.of(questionId.toString()));
+            log.info("Completed vector delete questionId={}", questionId);
         } catch (Exception e) {
+            log.error("VectorStore delete failed questionId={} cause={}", questionId, e.getMessage(), e);
             throw new VectorSyncException("Failed to remove vector for question " + questionId, e);
         }
     }

@@ -9,6 +9,7 @@ import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import tools.jackson.databind.ObjectMapper;
 
 class QuestionIndexingPublisherTest {
@@ -19,8 +20,13 @@ class QuestionIndexingPublisherTest {
         ApplicationEventPublisher events = org.mockito.Mockito.mock(ApplicationEventPublisher.class);
         UUID questionId = UUID.randomUUID();
         var properties = new KafkaIndexingProperties(true, "question-indexing.v1", "question-indexing.v1.DLT", "group", 60000);
+        var sendResult = org.mockito.Mockito.mock(SendResult.class);
+        var metadata = org.mockito.Mockito.mock(org.apache.kafka.clients.producer.RecordMetadata.class);
+        when(metadata.partition()).thenReturn(0);
+        when(metadata.offset()).thenReturn(7L);
+        when(sendResult.getRecordMetadata()).thenReturn(metadata);
         when(kafka.send(eq("question-indexing.v1"), eq(questionId.toString()), org.mockito.ArgumentMatchers.contains("UPSERT")))
-            .thenReturn(CompletableFuture.completedFuture(null));
+            .thenReturn(CompletableFuture.completedFuture(sendResult));
 
         var publisher = new QuestionIndexingPublisher(events, kafka, properties, new ObjectMapper());
         publisher.publishNow(new QuestionIndexingEvent(questionId, QuestionIndexingEvent.Operation.UPSERT));
