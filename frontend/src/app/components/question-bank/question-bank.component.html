@@ -82,12 +82,12 @@
     <div class="pagination"><button type="button" (click)="changePage(-1)" [disabled]="page() === 0">Previous</button><span>Page {{ page() + 1 }} of {{ rows.totalPages }}</span><button type="button" (click)="changePage(1)" [disabled]="page() + 1 >= rows.totalPages">Next</button></div>
     <section class="panel question-table" aria-label="Question bank rows">
       <div class="table-head"><span>Question stem</span><span>Coverage &amp;
-          level</span><span>Origin</span><span>Actions</span></div>@for (question of filteredQuestions; track
+          level</span><span>Origin</span><span>Indexing</span><span>Actions</span></div>@for (question of filteredQuestions; track
       question.id) {<article class="table-row" (click)="selectedQuestion = question">
         <div><strong>{{ question.stem }}</strong><small>{{ question.origin }} · Updated: {{ question.updatedAt |
             date:'mediumDate' }}</small></div><span class="coverage-tag">{{ displaySkill(question.primarySkill ||
           'BEHAVIORAL') }}<small>{{ question.difficulty || 'All levels' }}</small></span><span class="tag">● {{
-          question.status }}</span>
+          question.status }}</span><span class="indexing-tag" [attr.data-status]="question.indexingStatus">{{ indexingLabel(question.indexingStatus) }}</span>
         <div class="row-actions"><button type="button" (click)="$event.stopPropagation(); copyQuestion(question)">📋
             Copy</button>@if (question.origin === 'OWNER_IMPORT') {<button type="button"
             (click)="$event.stopPropagation(); toggleStatus(question)" [disabled]="busy()">Toggle</button>}</div>
@@ -109,7 +109,8 @@
         <div class="evidence"><b>Tags</b>
           <p>{{ formatTags(selectedQuestion.tags) || 'None' }}</p><b>Rubric</b>
           <p>{{ formatTags(selectedQuestion.rubric) || 'No rubric available.' }}</p><b>Ideal answer</b>
-          <p>{{ selectedQuestion.idealAnswer || 'No ideal answer available.' }}</p>
+          <p>{{ selectedQuestion.idealAnswer || 'No ideal answer available.' }}</p><b>Indexing</b>
+          <p>{{ indexingLabel(selectedQuestion.indexingStatus) }}</p>
         </div>
       </section>
     </div>}

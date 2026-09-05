@@ -2,6 +2,7 @@ package com.automatedinterview.questionbank;
 
 import com.automatedinterview.catalog.SkillCatalog;
 import com.automatedinterview.catalog.SkillCatalogService;
+import com.automatedinterview.ai.QuestionIndexingPublisher;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
@@ -13,6 +14,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @Order(10)
@@ -23,12 +25,14 @@ public class QuestionSeedLoader implements CommandLineRunner {
 
     private final JdbcClient jdbc;
     private final SkillCatalogService catalog;
+    private final QuestionIndexingPublisher indexing;
 
-    public QuestionSeedLoader(JdbcClient jdbc, SkillCatalogService catalog) {
-        this.jdbc = jdbc; this.catalog = catalog;
+    public QuestionSeedLoader(JdbcClient jdbc, SkillCatalogService catalog, QuestionIndexingPublisher indexing) {
+        this.jdbc = jdbc; this.catalog = catalog; this.indexing = indexing;
     }
 
     @Override
+    @Transactional
     public void run(String... args) {
         List<String> difficulties = List.of("EASY", "MEDIUM", "HARD");
         for (SkillCatalog.Skill skill : catalog.activeSkills()) {
@@ -57,7 +61,7 @@ public class QuestionSeedLoader implements CommandLineRunner {
 
         // 1. Relational upsert (JDBC) — domain table is the source of truth.
         //    ON CONFLICT DO NOTHING preserves seed questions that the owner has customised.
-        jdbc.sql("""
+        int changed = jdbc.sql("""
             INSERT INTO question (id, content_hash, stem, type, primary_skill, difficulty, tags, rubric,
                                   ideal_answer, origin, status, source_hash, enrichment_provenance)
             VALUES (:id, :hash, :stem, :type, :skill, :difficulty,
@@ -71,7 +75,7 @@ public class QuestionSeedLoader implements CommandLineRunner {
             .param("rubric", criteria).param("ideal", ideal).param("origin", origin)
             .update();
 
-        // Vector indexing is queued through question.indexing_status and handled asynchronously.
+        if (changed > 0) indexing.requestUpsert(id);
     }
 
     private String hash(String value) {

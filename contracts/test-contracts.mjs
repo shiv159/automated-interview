@@ -28,6 +28,7 @@ test('API contract includes implemented feature responses', () => {
   assert.match(openapi, /roleTitle/);
   assert.match(openapi, /\/api\/v1\/documents\/preview/);
   assert.match(openapi, /QuestionBankResponse/);
+  assert.match(openapi, /indexingStatus/);
   assert.match(openapi, /ReportResponse/);
   assert.match(openapi, /aggregate scores are 0-100/);
 });

@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,10 +24,8 @@ import java.util.UUID;
  * API call is made <em>before</em> the delete so that if the external API fails
  * the existing vector is never removed.
  *
- * <h3>Reconciliation</h3>
- * {@link #reconcileMissingVectors()} scans for ACTIVE questions without a
- * matching {@code vector_store} row and re-embeds them. It is called by
- * {@link VectorReconciliationJob} on startup.
+ * Kafka consumers and the recovery job use this service as the sole vector
+ * projection writer.
  */
 @Service
 public class VectorSyncService {
@@ -36,15 +33,13 @@ public class VectorSyncService {
     private static final Logger log = LoggerFactory.getLogger(VectorSyncService.class);
 
     private final VectorStore vectorStore;
-    private final JdbcClient jdbc;
     private final ObjectMapper objectMapper;
     @Value("${VERTEX_EMBEDDING_MODEL:text-embedding-005}") private String embeddingModel;
     @Value("${APP_EMBEDDING_PROFILE:local}") private String embeddingProfile;
     @Value("${app.ai.embedding-dimensions:768}") private int embeddingDimensions;
 
-    public VectorSyncService(VectorStore vectorStore, JdbcClient jdbc, ObjectMapper objectMapper) {
+    public VectorSyncService(VectorStore vectorStore, ObjectMapper objectMapper) {
         this.vectorStore = vectorStore;
-        this.jdbc = jdbc;
         this.objectMapper = objectMapper;
     }
 
@@ -59,10 +54,7 @@ public class VectorSyncService {
      * obtained are the delete and add issued. This means a transient API failure
      * leaves the old vector intact.
      *
-     * @throws VectorSyncException if the {@link VectorStore} add() call fails after
-     *         a successful delete(), leaving the question without a searchable vector.
-     *         The caller should surface this error; {@link VectorReconciliationJob}
-     *         will repair it on the next startup.
+     * @throws VectorSyncException if a vector store operation fails.
      */
     @Transactional
     public void upsert(UUID questionId, String stem, String type,
@@ -77,8 +69,7 @@ public class VectorSyncService {
         try {
             vectorStore.add(List.of(document));
         } catch (Exception e) {
-            // The vector is now missing — log loudly so the reconciliation job can repair it.
-            log.error("VectorStore add failed for question {}. The vector is missing and will be rebuilt on next startup.", questionId, e);
+            log.error("VectorStore add failed for question {}. The vector is now missing.", questionId, e);
             throw new VectorSyncException("Failed to add vector for question " + questionId, e);
         }
     }
@@ -91,40 +82,8 @@ public class VectorSyncService {
         try {
             vectorStore.delete(List.of(questionId.toString()));
         } catch (Exception e) {
-            log.warn("VectorStore delete failed for question {}. Cause: {}", questionId, e.getMessage());
+            throw new VectorSyncException("Failed to remove vector for question " + questionId, e);
         }
-    }
-
-    /**
-     * Scans for ACTIVE questions whose ID does not exist in {@code vector_store}
-     * and re-embeds them. Called by {@link VectorReconciliationJob} on startup.
-     */
-    public void reconcileMissingVectors() {
-        List<UUID> missing = jdbc.sql("""
-            SELECT q.id FROM question q
-            LEFT JOIN vector_store vs ON vs.id = q.id
-            WHERE q.status = 'ACTIVE'
-              AND (q.indexing_status <> 'INDEXED'
-                   OR q.indexed_source_hash IS DISTINCT FROM q.source_hash
-                   OR vs.id IS NULL
-                   OR vs.content IS DISTINCT FROM q.stem
-                   OR vs.metadata->>'type' IS DISTINCT FROM q.type
-                   OR vs.metadata->>'primary_skill' IS DISTINCT FROM COALESCE(q.primary_skill, '')
-                   OR vs.metadata->>'secondary_skills' IS DISTINCT FROM q.secondary_skills::text
-                   OR vs.metadata->>'tags' IS DISTINCT FROM q.tags::text
-                   OR vs.metadata->>'difficulty' IS DISTINCT FROM COALESCE(q.difficulty, '')
-                   OR vs.metadata->>'status' IS DISTINCT FROM q.status)
-            """).query(UUID.class).list();
-
-        if (missing.isEmpty()) {
-            log.info("VectorReconciliation: no missing vectors found.");
-            return;
-        }
-        log.info("VectorReconciliation: rebuilding {} missing vector(s).", missing.size());
-
-        jdbc.sql("UPDATE question SET indexing_status = 'PENDING', indexing_next_attempt_at = now(), indexing_last_error = NULL WHERE id IN (:ids)")
-                .param("ids", missing).update();
-        log.info("VectorReconciliation: processed {} vector(s).", missing.size());
     }
 
     private Document buildDocument(UUID id, String stem, String type,

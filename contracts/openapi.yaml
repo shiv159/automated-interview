@@ -246,7 +246,7 @@ components:
         matched: {type: boolean}
     QuestionSummary:
       type: object
-      required: [id, stem, origin, status, type, tags, rubric, updatedAt]
+      required: [id, stem, origin, status, type, tags, rubric, indexingStatus, updatedAt]
       properties:
         id: {type: string, format: uuid}
         stem: {type: string}
@@ -259,6 +259,7 @@ components:
         tags: {type: string}
         rubric: {type: string}
         idealAnswer: {type: [string, 'null']}
+        indexingStatus: {type: string, enum: [PENDING, PROCESSING, INDEXED, FAILED]}
         updatedAt: {type: string, format: date-time}
     QuestionAnalysisResponse:
       type: object

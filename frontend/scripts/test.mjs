@@ -35,6 +35,15 @@ test('candidate and owner journeys expose required routes and actions', () => {
   }
 });
 
+test('question-bank exposes asynchronous indexing status without polling', () => {
+  const questionBankService = fs.readFileSync('src/app/services/question-bank.service.ts', 'utf8');
+  const questionBankComponent = fs.readFileSync('src/app/components/question-bank/question-bank.component.ts', 'utf8');
+  assert.match(questionBankService, /indexingStatus: "PENDING" \| "PROCESSING" \| "INDEXED" \| "FAILED"/);
+  assert.match(questionBankComponent, /indexingLabel/);
+  assert.match(template, /indexingStatus/);
+  assert.doesNotMatch(questionBankComponent, /setInterval|setTimeout/);
+});
+
 test('UI exposes accessible status and mobile layout rules', () => {
   assert.match(template, /aria-live="polite"/);
   assert.match(template, /aria-label="Question bank rows"/);

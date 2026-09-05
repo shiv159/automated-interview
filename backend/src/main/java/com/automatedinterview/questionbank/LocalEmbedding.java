@@ -13,7 +13,7 @@ import java.util.Locale;
  *
  * WARNING: Local vectors are not semantically equivalent to Vertex AI embeddings.
  * Switching an existing database between the "local" and "ai" embedding profiles
- * requires truncating vector_store and allowing VectorReconciliationJob to rebuild
+ * requires truncating vector_store and allowing the Kafka recovery job to rebuild
  * all vectors from scratch.
  */
 public final class LocalEmbedding {

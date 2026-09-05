@@ -14,6 +14,7 @@ export interface QuestionSummary {
   tags: string;
   rubric: string;
   idealAnswer: string | null;
+  indexingStatus: "PENDING" | "PROCESSING" | "INDEXED" | "FAILED";
   updatedAt: string;
 }
 export interface CoverageBucket {

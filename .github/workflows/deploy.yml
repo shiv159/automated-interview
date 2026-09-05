@@ -21,6 +21,10 @@ env:
   APP_ANSWER_EVALUATION_PROFILE: ai
   APP_QUESTION_ENRICHMENT_PROFILE: ai
   APP_EMBEDDING_PROFILE: ai
+  APP_KAFKA_INDEXING_ENABLED: true
+  APP_KAFKA_INDEXING_TOPIC: question-indexing.v1
+  APP_KAFKA_INDEXING_DLT_TOPIC: question-indexing.v1.DLT
+  APP_KAFKA_INDEXING_GROUP_ID: automated-interview-question-indexer
 
 jobs:
   test:
@@ -85,16 +89,28 @@ jobs:
           DATABASE_USERNAME: ${{ secrets.SPRING_DATASOURCE_USERNAME }}
           DATABASE_PASSWORD: ${{ secrets.SPRING_DATASOURCE_PASSWORD }}
           QUESTION_BANK_API_KEY: ${{ secrets.QUESTION_BANK_API_KEY }}
+          KAFKA_BOOTSTRAP_SERVERS: ${{ secrets.AIVEN_KAFKA_BOOTSTRAP_SERVERS }}
+          KAFKA_USERNAME: ${{ secrets.AIVEN_KAFKA_USERNAME }}
+          KAFKA_PASSWORD: ${{ secrets.AIVEN_KAFKA_PASSWORD }}
+          KAFKA_CA_CERTIFICATE: ${{ secrets.AIVEN_KAFKA_CA_CERTIFICATE }}
         run: |
           set -euo pipefail
           test -n "$DATABASE_URL"
           test -n "$DATABASE_USERNAME"
           test -n "$DATABASE_PASSWORD"
           test -n "$QUESTION_BANK_API_KEY"
+          test -n "$KAFKA_BOOTSTRAP_SERVERS"
+          test -n "$KAFKA_USERNAME"
+          test -n "$KAFKA_PASSWORD"
+          test -n "$KAFKA_CA_CERTIFICATE"
           printf '%s' "$DATABASE_URL" | gcloud secrets versions add automated-interview-database-url --project "$GCP_PROJECT_ID" --data-file=-
           printf '%s' "$DATABASE_USERNAME" | gcloud secrets versions add automated-interview-database-username --project "$GCP_PROJECT_ID" --data-file=-
           printf '%s' "$DATABASE_PASSWORD" | gcloud secrets versions add automated-interview-database-password --project "$GCP_PROJECT_ID" --data-file=-
           printf '%s' "$QUESTION_BANK_API_KEY" | gcloud secrets versions add automated-interview-question-bank-api-key --project "$GCP_PROJECT_ID" --data-file=-
+          printf '%s' "$KAFKA_BOOTSTRAP_SERVERS" | gcloud secrets versions add automated-interview-kafka-bootstrap-servers --project "$GCP_PROJECT_ID" --data-file=-
+          printf '%s' "$KAFKA_USERNAME" | gcloud secrets versions add automated-interview-kafka-username --project "$GCP_PROJECT_ID" --data-file=-
+          printf '%s' "$KAFKA_PASSWORD" | gcloud secrets versions add automated-interview-kafka-password --project "$GCP_PROJECT_ID" --data-file=-
+          printf '%s' "$KAFKA_CA_CERTIFICATE" | gcloud secrets versions add automated-interview-kafka-ca-certificate --project "$GCP_PROJECT_ID" --data-file=-
 
       - name: Configure Docker auth
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
@@ -119,8 +135,8 @@ jobs:
             --allow-unauthenticated \
             --no-cpu-throttling \
             --min-instances 1 \
-            --set-env-vars "VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},AI_DATA_RETENTION_ACKNOWLEDGED=${AI_DATA_RETENTION_ACKNOWLEDGED},APP_QUESTION_BANK_SEED_ENABLED=${APP_QUESTION_BANK_SEED_ENABLED},APP_ANSWER_EVALUATION_PROFILE=${APP_ANSWER_EVALUATION_PROFILE},APP_QUESTION_ENRICHMENT_PROFILE=${APP_QUESTION_ENRICHMENT_PROFILE},APP_EMBEDDING_PROFILE=${APP_EMBEDDING_PROFILE}" \
-            --set-secrets "SPRING_DATASOURCE_URL=automated-interview-database-url:latest,SPRING_DATASOURCE_USERNAME=automated-interview-database-username:latest,SPRING_DATASOURCE_PASSWORD=automated-interview-database-password:latest,QUESTION_BANK_API_KEY=automated-interview-question-bank-api-key:latest"
+            --set-env-vars "VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},AI_DATA_RETENTION_ACKNOWLEDGED=${AI_DATA_RETENTION_ACKNOWLEDGED},APP_QUESTION_BANK_SEED_ENABLED=${APP_QUESTION_BANK_SEED_ENABLED},APP_ANSWER_EVALUATION_PROFILE=${APP_ANSWER_EVALUATION_PROFILE},APP_QUESTION_ENRICHMENT_PROFILE=${APP_QUESTION_ENRICHMENT_PROFILE},APP_EMBEDDING_PROFILE=${APP_EMBEDDING_PROFILE},APP_KAFKA_INDEXING_ENABLED=${APP_KAFKA_INDEXING_ENABLED},APP_KAFKA_INDEXING_TOPIC=${APP_KAFKA_INDEXING_TOPIC},APP_KAFKA_INDEXING_DLT_TOPIC=${APP_KAFKA_INDEXING_DLT_TOPIC},APP_KAFKA_INDEXING_GROUP_ID=${APP_KAFKA_INDEXING_GROUP_ID}" \
+            --set-secrets "SPRING_DATASOURCE_URL=automated-interview-database-url:latest,SPRING_DATASOURCE_USERNAME=automated-interview-database-username:latest,SPRING_DATASOURCE_PASSWORD=automated-interview-database-password:latest,QUESTION_BANK_API_KEY=automated-interview-question-bank-api-key:latest,SPRING_KAFKA_BOOTSTRAP_SERVERS=automated-interview-kafka-bootstrap-servers:latest,AIVEN_KAFKA_USERNAME=automated-interview-kafka-username:latest,AIVEN_KAFKA_PASSWORD=automated-interview-kafka-password:latest,AIVEN_KAFKA_CA_CERTIFICATE=automated-interview-kafka-ca-certificate:latest"
 
       - name: Read backend URL
         id: backend_url
