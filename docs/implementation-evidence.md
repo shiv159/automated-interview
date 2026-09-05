@@ -10,7 +10,7 @@ answers.
 | Contracts | `npm test --prefix contracts` | 0 | command transcript | PASS |
 | Frontend build | `npm run build --prefix frontend` | 0 | `frontend/dist/` | PASS |
 | Frontend provider-free tests | `npm test --prefix frontend` | 0 | Node test transcript | PASS |
-| Backend/Testcontainers | `mvn test -q -f backend/pom.xml` | 0 | Maven transcript | PASS |
+| Backend/Testcontainers | `mvn test -q -f backend/pom.xml` | 0 | Maven transcript; Docker-dependent smoke test skipped when Docker is unavailable | PASS (unit tests) / INCOMPLETE (pgvector smoke test) |
 | Maven Wrapper | `backend/mvnw.cmd -q -DskipTests package` | 0 | Maven Wrapper transcript | PASS |
 | Compose config | `docker compose config --quiet` | 0 | command transcript | PASS |
 | Live Vertex question import | Docker Compose + API | 201 | sanitized API transcript | PASS |

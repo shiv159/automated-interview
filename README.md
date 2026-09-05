@@ -1,6 +1,51 @@
 # Automated Interview Platform
 
-Greenfield Angular/Spring Boot application for the automated interview MVP.
+An AI-assisted interview calibration platform that turns a job description and résumé into an evidence-based practice interview, then produces a structured coaching report. The application combines document analysis, semantic question retrieval, interactive interviewing, and rubric-based evaluation in one end-to-end workflow.
+
+[Live production demo](https://automated-interview-frontend-527840416057.us-central1.run.app/)
+
+> Use the built-in synthetic Java/Spring sample when trying the demo. Do not upload confidential résumés or job descriptions.
+
+![Intervu production landing page](docs/images/production-home.png)
+
+## Why this project stands out
+
+- **Evidence-based matching:** extracts supported skills from a résumé and compares them with job requirements.
+- **Adaptive interview generation:** retrieves and calibrates technical and behavioral questions using skill, difficulty, and semantic relevance.
+- **Explainable evaluation:** scores answers against question-specific rubrics and gives actionable strengths and improvement guidance.
+- **Production-minded delivery:** includes Docker Compose development, contract tests, Testcontainers coverage, provider-free modes, fail-closed AI behavior, and GitHub Actions deployment to Google Cloud Run.
+
+## Technology stack
+
+| Layer | Technologies |
+| --- | --- |
+| Frontend | Angular 22, TypeScript, RxJS, responsive HTML/CSS |
+| Backend | Java 21, Spring Boot 4, Spring AI, REST APIs, Bean Validation |
+| AI | Google Vertex AI / Gemini for analysis and evaluation; text embeddings for retrieval |
+| Data | PostgreSQL, pgvector, JDBC, Flyway migrations |
+| Delivery | Docker, Docker Compose, GitHub Actions, Google Cloud Run, Secret Manager |
+| Quality | Contract schemas, Node test scripts, JUnit, Testcontainers, Playwright smoke validation |
+
+## Production walkthrough
+
+The deployed application was validated with synthetic demo materials: candidate review creation, skill analysis, a three-question interview, answer evaluation, and the final coaching report all completed successfully with no browser console errors.
+
+![Intervu coaching report](docs/images/production-report.png)
+
+The report provides a readiness score, profile match, technical and behavioral scores, per-question feedback, and export actions for JSON/CSV or print/PDF.
+
+## Resume-ready project description
+
+> Built an AI-powered automated interview platform with Angular, Spring Boot, PostgreSQL/pgvector, and Vertex AI. Implemented résumé and job-description analysis, semantic question retrieval, adaptive technical and behavioral interviews, rubric-based answer evaluation, and actionable candidate reports. Added Docker Compose development, contract testing, Testcontainers coverage, provider-free fallbacks, and GitHub Actions deployment to Google Cloud Run.
+
+### Repository map
+
+- `frontend/` — Angular candidate and owner experiences.
+- `backend/` — Spring Boot REST API, document processing, interview lifecycle, AI adapters, and persistence.
+- `contracts/` — OpenAPI and JSON Schemas with contract tests.
+- `fixtures/` — synthetic resumes, job descriptions, answers, and question-import samples.
+- `docs/implementation-evidence.md` — deterministic verification results and evidence-handling rules.
+- `.github/workflows/deploy.yml` — test, container build, Secret Manager synchronization, and Cloud Run deployment.
 
 ## High-Level Application Flow
 
@@ -118,7 +163,7 @@ erDiagram
 
 ---
 
-## Local foundation
+## Run locally
 
 1. Copy `.env.example` to `.env`. The example file is already wired to `VERTEX_PROJECT_ID=intervu-ai-20260704-8f3c`; keep that value or replace it with your own Vertex project. Run `gcloud auth application-default login` once; Compose mounts the local ADC file into the backend and refreshes access tokens automatically. Never commit `.env` or Google credential files.
 2. Start PostgreSQL/pgvector and the backend:
@@ -142,7 +187,7 @@ Health check: `http://127.0.0.1:4200/api/health`
 
 ### Google Cloud deployment secrets
 
-The Cloud Run deployment workflow reads database credentials and the question-bank API key from Google Secret Manager. Create the secrets once in the target project and grant the Cloud Run runtime service account access:
+The Cloud Run deployment workflow synchronizes the database credentials and question-bank API key from GitHub Secrets into Google Secret Manager, then deploys Cloud Run using Secret Manager references. Create the secrets once in the target project and grant both identities the minimum required access:
 
 ```powershell
 gcloud secrets create automated-interview-database-url --replication-policy=automatic
@@ -162,6 +207,16 @@ gcloud secrets add-iam-policy-binding automated-interview-database-url `
 
 Repeat the final IAM command for the other three secrets. The runtime service account—not the GitHub Actions identity—must have `roles/secretmanager.secretAccessor`. Do not put secret values in workflow YAML, GitHub command arguments, or committed `.env` files.
 
+Grant the GitHub Actions deployment service account permission to add versions. In this repository it is the same service account configured by `GCP_SERVICE_ACCOUNT`:
+
+```powershell
+gcloud secrets add-iam-policy-binding automated-interview-database-url `
+  --member="serviceAccount:<github-deployment-service-account>" `
+  --role="roles/secretmanager.secretVersionAdder"
+```
+
+Repeat this command for the other three secrets. Add these GitHub repository secrets: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, and `QUESTION_BANK_API_KEY`. Each deployment creates a new Secret Manager version from those GitHub values; Cloud Run continues to read `latest`.
+
 Candidate routes are `/`, `/sessions/:id/analysis`,
 `/sessions/:id/interview`, and `/sessions/:id/report`. The owner question-bank
 route is `/question-bank`.
@@ -171,6 +226,11 @@ provider-free development, set `APP_ANSWER_EVALUATION_PROFILE` and
 `APP_EMBEDDING_PROFILE` to `local` (question import remains AI-backed because
 its structured enrichment is provider-required). Provider failures fail closed with
 stable API problem codes and never create partial sessions or evaluations.
+
+Question limits are configured in `backend/src/main/resources/application.yml`
+and can be overridden with environment variables. Defaults are 50 questions per
+import, 10,000 questions in the bank, 50 rows per bank page, and 3 questions per
+interview (maximum 10).
 
 If `VERTEX_PROJECT_ID` is missing while an `ai` profile is enabled, backend
 startup now fails fast with a targeted validation error before Spring AI can
