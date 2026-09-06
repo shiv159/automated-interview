@@ -129,6 +129,8 @@ jobs:
       - name: Deploy backend
         id: backend
         run: |
+          # Keep one instance alive because scheduled indexing and cleanup jobs
+          # run in-process, but throttle CPU while the instance is idle.
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
@@ -136,7 +138,7 @@ jobs:
             --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${BACKEND_SERVICE_NAME}:${GITHUB_SHA}" \
             --platform managed \
             --allow-unauthenticated \
-            --no-cpu-throttling \
+            --cpu-throttling \
             --min-instances 1 \
             --set-env-vars "VERTEX_PROJECT_ID=${VERTEX_PROJECT_ID},VERTEX_LOCATION=${VERTEX_LOCATION},AI_DATA_RETENTION_ACKNOWLEDGED=${AI_DATA_RETENTION_ACKNOWLEDGED},APP_QUESTION_BANK_SEED_ENABLED=${APP_QUESTION_BANK_SEED_ENABLED},APP_ANSWER_EVALUATION_PROFILE=${APP_ANSWER_EVALUATION_PROFILE},APP_QUESTION_ENRICHMENT_PROFILE=${APP_QUESTION_ENRICHMENT_PROFILE},APP_EMBEDDING_PROFILE=${APP_EMBEDDING_PROFILE},APP_KAFKA_INDEXING_ENABLED=${APP_KAFKA_INDEXING_ENABLED},APP_KAFKA_INDEXING_TOPIC=${APP_KAFKA_INDEXING_TOPIC},APP_KAFKA_INDEXING_DLT_TOPIC=${APP_KAFKA_INDEXING_DLT_TOPIC},APP_KAFKA_INDEXING_GROUP_ID=${APP_KAFKA_INDEXING_GROUP_ID}" \
             --set-secrets "SPRING_DATASOURCE_URL=automated-interview-database-url:latest,SPRING_DATASOURCE_USERNAME=automated-interview-database-username:latest,SPRING_DATASOURCE_PASSWORD=automated-interview-database-password:latest,QUESTION_BANK_API_KEY=automated-interview-question-bank-api-key:latest,SPRING_KAFKA_BOOTSTRAP_SERVERS=automated-interview-kafka-bootstrap-servers:latest,AIVEN_KAFKA_USERNAME=automated-interview-kafka-username:latest,AIVEN_KAFKA_PASSWORD=automated-interview-kafka-password:latest,AIVEN_KAFKA_CA_CERTIFICATE=automated-interview-kafka-ca-certificate:latest"
