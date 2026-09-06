@@ -98,7 +98,7 @@ public class QuestionBankController {
 
     public record QuestionBankResponse(List<QuestionSummary> questions, long total, long activeCount, long skillAreaCount, List<CoverageBucket> coverage, List<SkillOption> skills, int page, int size, int totalPages) { }
     public record SkillOption(String id, String displayName, List<String> aliases) { }
-    public record QuestionSummary(UUID id, String stem, String origin, String status, String type, String primarySkill, String secondarySkills, String difficulty, String tags, String rubric, String idealAnswer, Instant updatedAt) { }
+    public record QuestionSummary(UUID id, String stem, String origin, String status, String type, String primarySkill, String secondarySkills, String difficulty, String tags, String rubric, String idealAnswer, String indexingStatus, Instant updatedAt) { }
     public record CoverageBucket(String type, String primarySkill, String difficulty, String status, long count) { }
     public record StatusRequest(String status) { }
 }

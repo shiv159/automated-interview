@@ -3,6 +3,7 @@ package com.automatedinterview.questionbank;
 import com.automatedinterview.catalog.SkillCatalog;
 import com.automatedinterview.catalog.SkillCatalogService;
 import com.automatedinterview.ai.VertexQuestionEnricher;
+import com.automatedinterview.ai.QuestionIndexingPublisher;
 import com.automatedinterview.config.QuestionLimitsProperties;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -35,12 +36,15 @@ public class QuestionImportService {
     private final SkillCatalogService catalog;
     private final String enrichmentProfile;
     private final QuestionLimitsProperties.QuestionBank limits;
+    private final QuestionIndexingPublisher indexing;
 
     public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, SkillCatalogService catalog, ObjectMapper json,
-        @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile, QuestionLimitsProperties properties) {
+        @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile, QuestionLimitsProperties properties,
+        QuestionIndexingPublisher indexing) {
         this.jdbc = jdbc; this.enricher = enricher; this.catalog = catalog; this.json = json;
         this.enrichmentProfile = enrichmentProfile;
         this.limits = properties.questionBank();
+        this.indexing = indexing;
     }
 
     @Transactional
@@ -85,13 +89,14 @@ public class QuestionImportService {
                 """).param("id", id).param("hash", hash).param("stem", stem).param("type", classification.type()).param("skill", classification.skill())
                 .param("difficulty", classification.difficulty()).param("secondarySkills", secondarySkills).param("tags", tags).param("rubric", rubric).param("ideal", ideal).update();
             summaries.add(jdbc.sql("""
-                SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty, tags, rubric, ideal_answer, updated_at
+                SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty, tags, rubric, ideal_answer, indexing_status, updated_at
                 FROM question WHERE id = :id
                 """).param("id", id).query((rs, row) -> new QuestionBankController.QuestionSummary(
                     rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"), rs.getString("status"),
                      rs.getString("type"), rs.getString("primary_skill"), rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"),
-                     rs.getString("rubric"), rs.getString("ideal_answer"),
-                    rs.getTimestamp("updated_at").toInstant())).single());
+                     rs.getString("rubric"), rs.getString("ideal_answer"), rs.getString("indexing_status"),
+                     rs.getTimestamp("updated_at").toInstant())).single());
+            indexing.requestUpsert(id);
             if (exists) updated++; else created++;
         }
         return new ImportResponse(created, updated, 0, summaries, List.of());
@@ -179,6 +184,7 @@ public class QuestionImportService {
         catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
     }
 
+    @Transactional
     public ImportResponse importDraft(DraftImportRequest request) {
         if (request == null || request.questions() == null || request.questions().size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_DRAFT", 400);
         List<ApprovedSkill> approvedSkills = request.approvedSkills() == null ? List.of() : request.approvedSkills();
@@ -232,6 +238,7 @@ public class QuestionImportService {
                     .param("tags", json(item.tags())).param("rubric", json("BEHAVIORAL".equals(item.type()) ? List.of("SITUATION", "ACTION", "RESULT", "REFLECTION") : List.of("CORRECTNESS", "DEPTH", "CLARITY")))
                     .param("ideal", item.idealAnswer()).update();
                 summaries.add(loadSummary(id));
+                indexing.requestUpsert(id);
                 if (exists) updated++; else created++;
             } catch (Exception exception) {
                 skipped++;
@@ -271,24 +278,17 @@ public class QuestionImportService {
     }
 
     private QuestionBankController.QuestionSummary loadSummary(UUID id) {
-        return jdbc.sql("SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty, tags, rubric, ideal_answer, updated_at FROM question WHERE id = :id")
-            .param("id", id).query((rs, row) -> new QuestionBankController.QuestionSummary(rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"), rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"), rs.getString("rubric"), rs.getString("ideal_answer"), rs.getTimestamp("updated_at").toInstant())).single();
+        return jdbc.sql("SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty, tags, rubric, ideal_answer, indexing_status, updated_at FROM question WHERE id = :id")
+            .param("id", id).query((rs, row) -> new QuestionBankController.QuestionSummary(rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"), rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"), rs.getString("rubric"), rs.getString("ideal_answer"), rs.getString("indexing_status"), rs.getTimestamp("updated_at").toInstant())).single();
     }
 
+    @Transactional
     public void deactivate(UUID id, String status) {
         if (!Set.of("ACTIVE", "INACTIVE").contains(status)) throw new ImportException("INVALID_STATUS", 400);
-        int changed = jdbc.sql("UPDATE question SET status = :status, updated_at = now() WHERE id = :id AND origin = 'OWNER_IMPORT'")
+        int changed = jdbc.sql("UPDATE question SET status = :status, indexing_status = 'PENDING', indexing_next_attempt_at = now(), indexing_last_error = NULL, updated_at = now() WHERE id = :id AND origin = 'OWNER_IMPORT'")
             .param("status", status).param("id", id).update();
         if (changed == 0) throw new ImportException("SEED_QUESTION_IMMUTABLE", 409);
-        // Remove inactive vectors immediately; reactivation is queued for the worker.
-        if (status.equals("INACTIVE")) {
-            jdbc.sql("UPDATE question SET indexing_status = 'FAILED', indexing_next_attempt_at = NULL, indexing_last_error = 'Question deactivated' WHERE id = :id")
-                .param("id", id).update();
-            jdbc.sql("DELETE FROM vector_store WHERE id = :id").param("id", id).update();
-        } else {
-            jdbc.sql("UPDATE question SET indexing_status = 'PENDING', indexing_next_attempt_at = now(), indexing_last_error = NULL WHERE id = :id")
-                .param("id", id).update();
-        }
+        if (status.equals("INACTIVE")) indexing.requestDelete(id); else indexing.requestUpsert(id);
     }
 
     private List<ImportItem> normalize(MultipartFile file) {

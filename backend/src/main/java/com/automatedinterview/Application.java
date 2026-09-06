@@ -9,10 +9,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import com.automatedinterview.ai.AiProperties;
 import com.automatedinterview.config.QuestionLimitsProperties;
+import com.automatedinterview.ai.KafkaIndexingProperties;
 
 @SpringBootApplication
 @EnableScheduling
-@EnableConfigurationProperties({AiProperties.class, QuestionLimitsProperties.class})
+@EnableConfigurationProperties({AiProperties.class, QuestionLimitsProperties.class, KafkaIndexingProperties.class})
 public class Application {
     public static void main(String[] args) {
         SpringApplication application = new SpringApplication(Application.class);

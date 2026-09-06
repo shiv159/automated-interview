@@ -1,4 +1,11 @@
 app:
+  kafka:
+    indexing:
+      enabled: ${APP_KAFKA_INDEXING_ENABLED:false}
+      topic: ${APP_KAFKA_INDEXING_TOPIC:question-indexing.v1}
+      dlt-topic: ${APP_KAFKA_INDEXING_DLT_TOPIC:question-indexing.v1.DLT}
+      group-id: ${APP_KAFKA_INDEXING_GROUP_ID:automated-interview-question-indexer}
+      recovery-ms: ${APP_KAFKA_INDEXING_RECOVERY_MS:60000}
   question-bank:
     seed-enabled: ${APP_QUESTION_BANK_SEED_ENABLED:false}
     api-key: ${QUESTION_BANK_API_KEY:}
@@ -22,6 +29,27 @@ server:
 spring:
   application:
     name: automated-interview
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:}
+    properties:
+      security.protocol: ${SPRING_KAFKA_SECURITY_PROTOCOL:SASL_SSL}
+      sasl.mechanism: ${SPRING_KAFKA_SASL_MECHANISM:PLAIN}
+      sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username='${AIVEN_KAFKA_USERNAME:}' password='${AIVEN_KAFKA_PASSWORD:}';
+      ssl.truststore.type: ${SPRING_KAFKA_SSL_TRUSTSTORE_TYPE:PEM}
+      ssl.truststore.certificates: ${AIVEN_KAFKA_CA_CERTIFICATE:}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: ${APP_KAFKA_INDEXING_GROUP_ID:automated-interview-question-indexer}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: manual_immediate
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/interview}
     username: ${SPRING_DATASOURCE_USERNAME:interview}

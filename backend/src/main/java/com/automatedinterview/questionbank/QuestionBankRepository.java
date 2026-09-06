@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 public class QuestionBankRepository {
     private static final String LIST_QUERY = """
             SELECT id, stem, origin, status, type, primary_skill, secondary_skills, difficulty,
-                   tags, rubric, ideal_answer, updated_at
+                   tags, rubric, ideal_answer, indexing_status, updated_at
             FROM question
             WHERE (CAST(:search AS text) IS NULL OR LOWER(stem) LIKE LOWER(CAST(:search AS text)))
               AND (CAST(:skill AS text) IS NULL OR primary_skill = CAST(:skill AS text) OR (CAST(:skill AS text) = 'BEHAVIORAL' AND type = 'BEHAVIORAL'))
@@ -69,7 +69,7 @@ public class QuestionBankRepository {
             rs.getObject("id", UUID.class), rs.getString("stem"), rs.getString("origin"),
             rs.getString("status"), rs.getString("type"), rs.getString("primary_skill"),
             rs.getString("secondary_skills"), rs.getString("difficulty"), rs.getString("tags"),
-            rs.getString("rubric"), rs.getString("ideal_answer"), rs.getTimestamp("updated_at").toInstant());
+            rs.getString("rubric"), rs.getString("ideal_answer"), rs.getString("indexing_status"), rs.getTimestamp("updated_at").toInstant());
     }
 
     public static String listQuery() {

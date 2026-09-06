@@ -113,6 +113,10 @@ export class QuestionBankComponent implements OnInit {
     return this.bank()?.questions ?? [];
   }
 
+  indexingLabel(status: QuestionSummary["indexingStatus"]): string {
+    return status === "INDEXED" ? "Ready" : status === "PROCESSING" ? "Indexing" : status === "FAILED" ? "Failed" : "Queued";
+  }
+
   displaySkill(skill: string): string {
     return skill === "ALL"
       ? "All Skills"

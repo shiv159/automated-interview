@@ -74,7 +74,7 @@ CREATE TABLE session_question (
     id uuid PRIMARY KEY,
     session_id uuid NOT NULL REFERENCES interview_session(id) ON DELETE CASCADE,
     question_id uuid NOT NULL REFERENCES question(id),
-    position integer NOT NULL CHECK (position BETWEEN 1 AND 10),
+    position integer NOT NULL CHECK (position BETWEEN 1 AND 3),
     status varchar(16) NOT NULL CHECK (status IN ('LOCKED', 'ACTIVE', 'EVALUATING', 'EVALUATED')),
     type varchar(16) NOT NULL,
     primary_skill varchar(64),

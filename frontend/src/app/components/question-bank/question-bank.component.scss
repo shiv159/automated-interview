@@ -1,1 +1,13 @@
 :host { display: block; }
+
+.indexing-tag {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  color: #55706b;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.indexing-tag[data-status="FAILED"] { color: #a33d3d; }
+.indexing-tag[data-status="PROCESSING"] { color: #886515; }

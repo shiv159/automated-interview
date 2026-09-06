@@ -118,7 +118,7 @@ input:focus, textarea:focus { outline: 0; border-color: var(--soft); box-shadow:
 .filter-row button { border: 1px solid transparent; border-radius: 9999px; padding: 5px 10px; color: var(--muted); background: transparent; font-size: 12px; }
 .filter-row button.active, .filter-row button:hover { border-color: var(--border); color: var(--text); background: rgba(255, 255, 255, .05); }
 .question-table { margin-top: 24px; padding: 0; overflow: hidden; }
-.table-head, .table-row { display: grid; grid-template-columns: 2.2fr 1fr .7fr 1fr; gap: 16px; align-items: center; }
+.table-head, .table-row { display: grid; grid-template-columns: 2.2fr 1fr .7fr .8fr 1fr; gap: 16px; align-items: center; }
 .table-head { padding: 14px 24px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
 .table-row { padding: 16px 24px; border-top: 1px solid var(--subtle-border); background: rgba(255, 255, 255, .01); }
 .table-row:hover { background: rgba(255, 255, 255, .03); }
