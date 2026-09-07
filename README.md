@@ -44,7 +44,6 @@ The report provides a readiness score, profile match, technical and behavioral s
 - `backend/` — Spring Boot REST API, document processing, interview lifecycle, AI adapters, and persistence.
 - `contracts/` — OpenAPI and JSON Schemas with contract tests.
 - `fixtures/` — synthetic resumes, job descriptions, answers, and question-import samples.
-- `docs/implementation-evidence.md` — deterministic verification results and evidence-handling rules.
 - `.github/workflows/deploy.yml` — test, container build, Secret Manager synchronization, and Cloud Run deployment.
 
 ## High-Level Application Flow
