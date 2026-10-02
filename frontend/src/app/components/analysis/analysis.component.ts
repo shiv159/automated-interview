@@ -2,6 +2,7 @@ import { Component, Input, OnInit, inject, signal } from "@angular/core";
 import { Router, RouterLink } from "@angular/router";
 import { ApiErrorService } from "../../services/api-error.service";
 import { Session, SessionService, SkillClaim } from "../../services/session.service";
+import { skillClaims } from "../../services/skill-groups";
 
 @Component({
   selector: "app-analysis",
@@ -31,12 +32,7 @@ export class AnalysisComponent implements OnInit {
   }
 
   claims(kind: "matched" | "missing" | "additional"): SkillClaim[] {
-    const session = this.session();
-    if (!session) return [];
-    if (kind === "matched") return session.jobSkills.filter((c) => session.matchedSkills.includes(c.skillId));
-    if (kind === "missing") return session.jobSkills.filter((c) => session.missingSkills.includes(c.skillId));
-    const jobIds = new Set(session.jobSkills.map((c) => c.skillId));
-    return session.resumeSkills.filter((c) => !jobIds.has(c.skillId));
+    return skillClaims(this.session(), kind);
   }
 
   async startInterview() {

@@ -38,19 +38,19 @@ class QuestionImportDiagnosticsTest {
 
     @Test
     void rejectsShortAndNonQuestionLikeTextStems() {
-        var exception = QuestionImportService.validateTextQuestionStem("[INVALID TEST ROW: missing question text]");
+        var exception = QuestionFileParser.validateTextQuestionStem("[INVALID TEST ROW: missing question text]");
         assertEquals("INVALID_QUESTION_STEM", exception.code());
         assertTrue(exception.hint().contains("question"));
 
-        assertEquals("INVALID_QUESTION_STEM", QuestionImportService.validateTextQuestionStem("Hi").code());
-        assertNull(QuestionImportService.validateTextQuestionStem("Build a REST API with Spring Boot."));
+        assertEquals("INVALID_QUESTION_STEM", QuestionFileParser.validateTextQuestionStem("Hi").code());
+        assertNull(QuestionFileParser.validateTextQuestionStem("Build a REST API with Spring Boot."));
     }
 
     @Test
     void removesCommonTextListPrefixes() {
-        assertEquals("Design a Spring Boot service.", QuestionImportService.removeTextListPrefix("Q3: Design a Spring Boot service."));
-        assertEquals("What is PostgreSQL?", QuestionImportService.removeTextListPrefix("2) What is PostgreSQL?"));
-        assertEquals("Explain Docker.", QuestionImportService.removeTextListPrefix("- Explain Docker."));
+        assertEquals("Design a Spring Boot service.", QuestionFileParser.removeTextListPrefix("Q3: Design a Spring Boot service."));
+        assertEquals("What is PostgreSQL?", QuestionFileParser.removeTextListPrefix("2) What is PostgreSQL?"));
+        assertEquals("Explain Docker.", QuestionFileParser.removeTextListPrefix("- Explain Docker."));
     }
 
     @Test

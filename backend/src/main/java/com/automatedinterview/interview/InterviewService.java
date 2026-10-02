@@ -135,38 +135,6 @@ public class InterviewService {
         return "position < :totalQuestions";
     }
 
-    /**
-     * Maps a Spring AI {@link org.springframework.ai.document.Document} back to an authoritative
-     * {@link QuestionRow} by re-fetching the domain row from the {@code question} table.
-     *
-     * <p>This guards against stale vector metadata: even if the vector store has an outdated
-     * status or skill, the domain row is the source of truth.
-     *
-     * @return null if the question is missing or no longer matches the requested constraints.
-     */
-    private QuestionRow mapToQuestionRow(org.springframework.ai.document.Document doc,
-                                          String expectedSkill, String expectedDifficulty) {
-        Object questionIdObj = doc.getMetadata().get("question_id");
-        if (questionIdObj == null) return null;
-        UUID questionId;
-        try { questionId = UUID.fromString(questionIdObj.toString()); }
-        catch (IllegalArgumentException e) { return null; }
-
-        return jdbc.sql("""
-            SELECT id, stem, type, primary_skill, difficulty, rubric, ideal_answer, content_hash
-            FROM question
-            WHERE id = :id AND status = 'ACTIVE'
-              AND (CAST(:skill AS text) IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))
-              AND (CAST(:difficulty AS text) IS NULL OR difficulty = :difficulty)
-            """)
-            .param("id", questionId)
-            .param("skill", expectedSkill)
-            .param("difficulty", expectedDifficulty)
-            .query(this::question)
-            .optional()
-            .orElse(null);
-    }
-
     private String queryText(TargetSkill target, String difficulty) {
         return List.of(target.displayName(), difficulty, target.jobEvidence(), target.resumeEvidence()).stream()
             .map(value -> DocumentNormalizer.normalize(value == null ? "" : value)).reduce((left, right) -> left + "\n" + right).orElse("");

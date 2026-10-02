@@ -136,8 +136,16 @@ export class QuestionBankComponent implements OnInit {
   }
 
   async importQuestions() {
+    await this.analyzeQuestions(false);
+  }
+
+  async retryAnalysis() {
+    await this.analyzeQuestions(true);
+  }
+
+  private async analyzeQuestions(retry: boolean) {
     if (!this.ownerFile) {
-      this.message.set("Choose a TXT or JSON file first.");
+      if (!retry) this.message.set("Choose a TXT or JSON file first.");
       return;
     }
     const name = this.ownerFile.name.toLowerCase();
@@ -145,9 +153,7 @@ export class QuestionBankComponent implements OnInit {
       this.ownerFile.size > 65536 ||
       (!name.endsWith(".txt") && !name.endsWith(".json"))
     ) {
-      this.message.set(
-        "Choose a UTF-8 TXT or JSON file no larger than 64 KiB.",
-      );
+      this.message.set("Choose a UTF-8 TXT or JSON file no larger than 64 KiB.");
       return;
     }
     this.busy.set(true);
@@ -160,33 +166,13 @@ export class QuestionBankComponent implements OnInit {
       this.suggestions.set(
         payload.newSkills.map((skill) => ({ ...skill, approved: true })),
       );
-      this.message.set(
-        "Review the detected skills, then import valid questions.",
-      );
+      this.message.set(retry
+        ? "Analysis retried. Review the results before importing."
+        : "Review the detected skills, then import valid questions.");
     } catch (e: unknown) {
-      this.message.set(this.apiErrors.message(e, "Import failed."));
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  async retryAnalysis() {
-    if (!this.ownerFile) return;
-    this.busy.set(true);
-    this.message.set("");
-    try {
-      const payload = await this.questionBankService.analyzeQuestions(
-        this.ownerFile,
-      );
-      this.draft.set(payload.questions);
-      this.suggestions.set(
-        payload.newSkills.map((skill) => ({ ...skill, approved: true })),
-      );
       this.message.set(
-        "Analysis retried. Review the results before importing.",
+        this.apiErrors.message(e, retry ? "Analysis retry failed." : "Import failed."),
       );
-    } catch (e: unknown) {
-      this.message.set(this.apiErrors.message(e, "Analysis retry failed."));
     } finally {
       this.busy.set(false);
     }

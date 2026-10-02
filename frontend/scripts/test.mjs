@@ -79,6 +79,25 @@ test('candidate review exposes job, resume-only, and unsupported skill evidence'
   assert.match(template, /unsupportedJobSkills/);
 });
 
+test('candidate and analysis views share skill grouping logic', () => {
+  const groups = fs.readFileSync('src/app/services/skill-groups.ts', 'utf8');
+  const candidate = fs.readFileSync('src/app/components/candidate-review/candidate-review.component.ts', 'utf8');
+  const analysis = fs.readFileSync('src/app/components/analysis/analysis.component.ts', 'utf8');
+  assert.match(groups, /matchedSkills\.includes\(claim\.skillId\)/);
+  assert.match(groups, /missingSkills\.includes\(claim\.skillId\)/);
+  assert.match(groups, /resumeSkills\.filter/);
+  assert.match(candidate, /skillClaims\(this\.result\(\), "matched"\)/);
+  assert.match(analysis, /skillClaims\(this\.session\(\), kind\)/);
+});
+
+test('question import and retry share one analysis handler with distinct feedback', () => {
+  const questionBank = fs.readFileSync('src/app/components/question-bank/question-bank.component.ts', 'utf8');
+  assert.match(questionBank, /importQuestions\(\)\s*\{\s*await this\.analyzeQuestions\(false\)/);
+  assert.match(questionBank, /retryAnalysis\(\)\s*\{\s*await this\.analyzeQuestions\(true\)/);
+  assert.match(questionBank, /Analysis retried\. Review the results before importing\./);
+  assert.match(questionBank, /Analysis retry failed\./);
+});
+
 test('analysis is a separate focused view and action buttons share spacing', () => {
   assert.match(template, /components\/analysis\/analysis\.component/);
   const candidateReview = fs.readFileSync('src/app/components/candidate-review/candidate-review.component.html', 'utf8');

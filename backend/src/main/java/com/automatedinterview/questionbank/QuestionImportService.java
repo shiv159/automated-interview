@@ -5,22 +5,15 @@ import com.automatedinterview.catalog.SkillCatalogService;
 import com.automatedinterview.ai.VertexQuestionEnricher;
 import com.automatedinterview.ai.QuestionIndexingPublisher;
 import com.automatedinterview.config.QuestionLimitsProperties;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
-import java.nio.charset.CodingErrorAction;
 import java.security.MessageDigest;
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -29,19 +22,20 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class QuestionImportService {
-    private static final Logger log = LoggerFactory.getLogger(QuestionImportService.class);
     private final ObjectMapper json;
     private final JdbcClient jdbc;
     private final VertexQuestionEnricher enricher;
     private final SkillCatalogService catalog;
+    private final QuestionFileParser fileParser;
     private final String enrichmentProfile;
     private final QuestionLimitsProperties.QuestionBank limits;
     private final QuestionIndexingPublisher indexing;
 
-    public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, SkillCatalogService catalog, ObjectMapper json,
+    public QuestionImportService(JdbcClient jdbc, VertexQuestionEnricher enricher, SkillCatalogService catalog,
+        QuestionFileParser fileParser, ObjectMapper json,
         @Value("${APP_QUESTION_ENRICHMENT_PROFILE:ai}") String enrichmentProfile, QuestionLimitsProperties properties,
         QuestionIndexingPublisher indexing) {
-        this.jdbc = jdbc; this.enricher = enricher; this.catalog = catalog; this.json = json;
+        this.jdbc = jdbc; this.enricher = enricher; this.catalog = catalog; this.fileParser = fileParser; this.json = json;
         this.enrichmentProfile = enrichmentProfile;
         this.limits = properties.questionBank();
         this.indexing = indexing;
@@ -49,14 +43,14 @@ public class QuestionImportService {
 
     @Transactional
     public ImportResponse importFile(MultipartFile file) {
-        List<ImportItem> items = normalize(file);
+        List<QuestionFileParser.ParsedQuestion> items = fileParser.parseStrict(file, limits.maxImportQuestions());
         if (!enrichmentProfile.equals("ai")) throw new ImportException("QUESTION_ENRICHMENT_UNAVAILABLE", 503);
         int created = 0;
         int updated = 0;
         int bankSize = jdbc.sql("SELECT count(*) FROM question").query(Integer.class).single();
         List<QuestionBankController.QuestionSummary> summaries = new ArrayList<>();
         for (int itemIndex = 0; itemIndex < items.size(); itemIndex++) {
-            ImportItem item = items.get(itemIndex);
+            QuestionFileParser.ParsedQuestion item = items.get(itemIndex);
             String stem = item.stem();
             Classification classification;
             try { classification = classify(item); }
@@ -103,13 +97,13 @@ public class QuestionImportService {
     }
 
     public AnalysisResponse analyzeFile(MultipartFile file) {
-        ParseBatch parsed = normalizeLenient(file);
-        List<ImportItem> items = parsed.items();
+        QuestionFileParser.LenientBatch parsed = fileParser.parseLenient(file, limits.maxImportQuestions());
+        List<QuestionFileParser.ParsedQuestion> items = parsed.questions();
         List<AnalysisQuestion> questions = new ArrayList<>();
         Set<String> known = catalog.activeSkills().stream().map(SkillCatalog.Skill::id).collect(java.util.stream.Collectors.toSet());
         java.util.Map<String, SkillSuggestion> suggestions = new java.util.LinkedHashMap<>();
         for (int index = 0; index < items.size(); index++) {
-            ImportItem item = items.get(index);
+            QuestionFileParser.ParsedQuestion item = items.get(index);
             int questionIndex = index + 1;
             if (questionExists(item.stem())) {
                 questions.add(new AnalysisQuestion(item.stem(), null, null, List.of(), null, List.of(), null, "DUPLICATE", "QUESTION_ALREADY_EXISTS"));
@@ -134,56 +128,6 @@ public class QuestionImportService {
             .param("hash", hash(stem)).query(Long.class).single() > 0;
     }
 
-    private ParseBatch normalizeLenient(MultipartFile file) {
-        try {
-            if (file == null || file.getSize() > 65536) throw new ImportException("INVALID_QUESTION_FILE", 400);
-            String value;
-            try { value = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(file.getBytes())).toString(); }
-            catch (CharacterCodingException exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
-            if (value.startsWith("\ufeff")) value = value.substring(1);
-            value = value.replace("\r\n", "\n").replace('\r', '\n');
-            if ((file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".json")) || value.stripLeading().startsWith("[")) {
-                JsonNode root = json.readTree(value);
-                if (root == null || !root.isArray() || root.isEmpty() || root.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
-                List<ImportItem> items = new ArrayList<>(); List<ImportDiagnostic> errors = new ArrayList<>(); Set<String> seen = new HashSet<>();
-                for (int index = 0; index < root.size(); index++) {
-                    try {
-                        JsonNode node = root.get(index);
-                        if (!node.isObject() || !node.hasNonNull("stem") || !node.get("stem").isTextual()) throw invalid(index + 1, "stem", "Provide a text question stem.");
-                        String stem = normalizeStem(node.get("stem").asText());
-                        if (stem.isBlank() || !seen.add(stem)) throw invalid(index + 1, "stem", "Provide a unique question stem.");
-                        String type = optionalText(node, "type", index + 1); String skill = optionalText(node, "primarySkill", index + 1); String difficulty = optionalText(node, "difficulty", index + 1);
-                        List<String> secondary = optionalStringArray(node, "secondarySkills", index + 1);
-                        if (type != null && !Set.of("TECHNICAL", "BEHAVIORAL").contains(type)) throw invalid(index + 1, "type", "Use TECHNICAL or BEHAVIORAL.");
-                        if (difficulty != null && !Set.of("EASY", "MEDIUM", "HARD").contains(difficulty)) throw invalid(index + 1, "difficulty", "Use EASY, MEDIUM, or HARD.");
-                        if ("BEHAVIORAL".equals(type) && (skill != null || difficulty != null || !secondary.isEmpty())) throw invalid(index + 1, "type", "Behavioral questions cannot have technical skill fields.");
-                        items.add(new ImportItem(stem, type, skill, difficulty, secondary));
-                    } catch (ImportException exception) { errors.add(exception.withContext(index + 1, exception.line(), exception.field(), exception.hint()).diagnostic()); }
-                }
-                return new ParseBatch(items, errors);
-            }
-            List<ImportItem> items = new ArrayList<>(); List<ImportDiagnostic> errors = new ArrayList<>(); Set<String> seen = new HashSet<>();
-            String[] lines = value.split("\n", -1);
-            for (int index = 0; index < lines.length; index++) {
-                try {
-                    if (lines[index].strip().isBlank()) continue;
-                    String candidate = removeTextListPrefix(lines[index]);
-                    ImportException rawStemError = validateTextQuestionStem(candidate.strip());
-                    if (rawStemError != null) throw rawStemError;
-                    String stem = normalizeStem(candidate);
-                    if (stem.isBlank()) continue;
-                    ImportException stemError = validateTextQuestionStem(stem);
-                    if (stemError != null) throw stemError;
-                    if (!seen.add(stem)) throw new ImportException("INVALID_QUESTION_FILE", 422, "Duplicate question stem.", null, index + 1, "stem", "Remove the duplicate line.");
-                    items.add(new ImportItem(stem, null, null, null, List.of()));
-                } catch (ImportException exception) { errors.add(exception.withContext(null, index + 1, exception.field(), exception.hint()).diagnostic()); }
-            }
-            if (items.isEmpty() || items.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
-            return new ParseBatch(items, errors);
-        } catch (ImportException exception) { throw exception; }
-        catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
-    }
-
     @Transactional
     public ImportResponse importDraft(DraftImportRequest request) {
         if (request == null || request.questions() == null || request.questions().size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_DRAFT", 400);
@@ -200,7 +144,7 @@ public class QuestionImportService {
                 if (item == null || item.stem() == null || item.secondarySkills() == null || item.tags() == null) {
                     throw new IllegalArgumentException("Question fields are incomplete");
                 }
-                String stem = normalizeStem(item.stem());
+                String stem = fileParser.normalizeStem(item.stem());
                 if (stem.isBlank() || !seenStems.add(stem)) throw new IllegalArgumentException("Question stem must be unique and between 10 and 1000 characters");
                 validateDraftFields(item);
                 if (!"VALID".equals(item.status())) throw new IllegalArgumentException("Question was not valid during analysis");
@@ -291,121 +235,12 @@ public class QuestionImportService {
         if (status.equals("INACTIVE")) indexing.requestDelete(id); else indexing.requestUpsert(id);
     }
 
-    private List<ImportItem> normalize(MultipartFile file) {
-        try {
-            if (file == null || file.getSize() > 65536) throw new ImportException("INVALID_QUESTION_FILE", 400);
-            String value;
-            try { value = StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(file.getBytes())).toString(); }
-            catch (CharacterCodingException exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
-            if (value.startsWith("\ufeff")) value = value.substring(1);
-            value = value.replace("\r\n", "\n").replace('\r', '\n');
-            if ((file.getOriginalFilename() != null && file.getOriginalFilename().toLowerCase(Locale.ROOT).endsWith(".json")) || value.stripLeading().startsWith("["))
-                return normalizeJson(value);
-            List<ImportItem> lines = new ArrayList<>();
-            List<ImportDiagnostic> errors = new ArrayList<>();
-            Set<String> seen = new HashSet<>();
-            String[] rawLines = value.split("\n", -1);
-            for (int lineIndex = 0; lineIndex < rawLines.length; lineIndex++) {
-                String normalized;
-                if (rawLines[lineIndex].strip().isBlank()) continue;
-                String candidate = removeTextListPrefix(rawLines[lineIndex]);
-                ImportException rawStemError = validateTextQuestionStem(candidate.strip());
-                if (rawStemError != null) { errors.add(rawStemError.withContext(null, lineIndex + 1, rawStemError.field(), rawStemError.hint()).diagnostic()); continue; }
-                try { normalized = normalizeStem(candidate); }
-                catch (ImportException exception) { errors.add(exception.withContext(null, lineIndex + 1, exception.field(), exception.hint()).diagnostic()); continue; }
-                if (normalized.isBlank()) continue;
-                ImportException stemError = validateTextQuestionStem(normalized);
-                if (stemError != null) { errors.add(stemError.withContext(null, lineIndex + 1, stemError.field(), stemError.hint()).diagnostic()); continue; }
-                if (!seen.add(normalized)) { errors.add(new ImportException("INVALID_QUESTION_FILE", 422, "Duplicate question stem.", null, lineIndex + 1, "stem", "Remove the duplicate line or change its stem.").diagnostic()); continue; }
-                lines.add(new ImportItem(normalized, null, null, null, List.of()));
-            }
-            if (!errors.isEmpty()) throw ImportException.batch(errors);
-            if (lines.isEmpty() || lines.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
-            return lines;
-        } catch (ImportException exception) { throw exception; }
-        catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
-    }
-
-    private List<ImportItem> normalizeJson(String value) {
-        try {
-            JsonNode root = json.readTree(value);
-            if (root == null || !root.isArray() || root.isEmpty() || root.size() > limits.maxImportQuestions()) throw new ImportException("INVALID_QUESTION_FILE", 400);
-            List<ImportItem> items = new ArrayList<>(); List<ImportDiagnostic> errors = new ArrayList<>(); Set<String> seen = new HashSet<>();
-            for (int itemIndex = 0; itemIndex < root.size(); itemIndex++) {
-                JsonNode node = root.get(itemIndex);
-                int itemNumber = itemIndex + 1;
-                try {
-                    if (!node.isObject()) throw invalid(itemNumber, null, "Each item must be an object.");
-                    if (!node.hasNonNull("stem") || !node.get("stem").isTextual()) throw invalid(itemNumber, "stem", "Provide a non-empty text question stem.");
-                    String stem = normalizeStem(node.get("stem").asText());
-                    if (stem.isBlank()) throw new ImportException("INVALID_QUESTION_FILE", 422, "Stem must not be blank.", itemNumber, null, "stem", "Provide a question with at least 10 characters.");
-                    if (!seen.add(stem)) throw new ImportException("INVALID_QUESTION_FILE", 422, "Duplicate question stem.", itemNumber, null, "stem", "Remove the duplicate item or change its stem.");
-                    String type = optionalText(node, "type", itemNumber); String skill = optionalText(node, "primarySkill", itemNumber); String difficulty = optionalText(node, "difficulty", itemNumber);
-                    List<String> secondary = optionalStringArray(node, "secondarySkills", itemNumber);
-                    if (type != null && !Set.of("TECHNICAL", "BEHAVIORAL").contains(type)) throw invalid(itemNumber, "type", "Use TECHNICAL or BEHAVIORAL.");
-                    if (difficulty != null && !Set.of("EASY", "MEDIUM", "HARD").contains(difficulty)) throw invalid(itemNumber, "difficulty", "Use EASY, MEDIUM, or HARD.");
-                    if ("BEHAVIORAL".equals(type) && (skill != null || difficulty != null || !secondary.isEmpty())) throw new ImportException("QUESTION_FIELD_CONFLICT", 422, "Behavioral questions cannot include skill or difficulty fields.", itemNumber, null, skill != null ? "primarySkill" : !secondary.isEmpty() ? "secondarySkills" : "difficulty", "Remove the conflicting field.");
-                    if (skill != null && secondary.contains(skill)) throw invalid(itemNumber, "secondarySkills", "Do not repeat the primary skill as a secondary skill.");
-                    items.add(new ImportItem(stem, type, skill, difficulty, secondary));
-                } catch (ImportException exception) {
-                    errors.add(exception.withContext(itemNumber, exception.line(), exception.field(), exception.hint()).diagnostic());
-                }
-            }
-            if (!errors.isEmpty()) throw ImportException.batch(errors);
-            return items;
-        } catch (ImportException exception) { throw exception; }
-        catch (Exception exception) { throw new ImportException("INVALID_QUESTION_FILE", 400); }
-    }
-
-    private String optionalText(JsonNode node, String field, int itemNumber) {
-        if (!node.has(field) || node.get(field).isNull()) return null;
-        if (!node.get(field).isTextual() || node.get(field).asText().isBlank()) throw invalid(itemNumber, field, "Provide a non-empty text value or remove the field.");
-        return node.get(field).asText();
-    }
-
-    private ImportException invalid(int item, String field, String hint) {
-        return new ImportException("INVALID_QUESTION_FILE", 400, "Invalid question import data.", item, null, field, hint);
-    }
-
-    private String normalizeStem(String value) {
-        String normalized = Normalizer.normalize(value.strip().replaceAll("\\s+", " "), Normalizer.Form.NFC);
-        if (normalized.indexOf('\0') >= 0 || normalized.chars().anyMatch(character -> Character.isISOControl(character) && character != '\t')) throw new ImportException("INVALID_QUESTION_FILE", 400);
-        if (!normalized.isBlank() && (normalized.codePointCount(0, normalized.length()) < 10 || normalized.codePointCount(0, normalized.length()) > 1000)) throw new ImportException("INVALID_QUESTION_FILE", 400);
-        return normalized;
-    }
-
-    static ImportException validateTextQuestionStem(String stem) {
-        if (stem == null || stem.codePointCount(0, stem.length()) < 20) {
-            return new ImportException("INVALID_QUESTION_STEM", 422, "Question stem is too short.", null, null, "stem", "Provide a question with at least 20 characters.");
-        }
-        String trimmed = stem.strip();
-        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-            return new ImportException("INVALID_QUESTION_STEM", 422, "Question stem looks like a placeholder.", null, null, "stem", "Replace the placeholder with a real interview question.");
-        }
-        return null;
-    }
-
-    static String removeTextListPrefix(String value) {
-        return value.replaceFirst("^\\s*(?:[Qq]\\s*\\d+[:.)]|\\d+[.)]|[-*•])\\s*", "").strip();
-    }
-
-    private List<String> optionalStringArray(JsonNode node, String field, int itemNumber) {
-        if (!node.has(field) || node.get(field).isNull()) return List.of();
-        if (!node.get(field).isArray()) throw invalid(itemNumber, field, "Provide an array of canonical skill IDs.");
-        List<String> values = new ArrayList<>();
-        for (JsonNode value : node.get(field)) {
-            if (!value.isTextual() || value.asText().isBlank() || !values.add(value.asText()))
-                throw invalid(itemNumber, field, "Provide unique, non-empty skill IDs.");
-        }
-        return List.copyOf(values);
-    }
-
     private String json(Object value) {
         try { return json.writeValueAsString(value); }
         catch (Exception exception) { throw new IllegalStateException("Unable to serialize question metadata", exception); }
     }
 
-    private Classification classify(ImportItem item) {
+    private Classification classify(QuestionFileParser.ParsedQuestion item) {
         String stem = item.stem();
         if (item.type() != null) {
             if (item.type().equals("BEHAVIORAL")) return new Classification("BEHAVIORAL", null, null);
@@ -438,9 +273,7 @@ public class QuestionImportService {
         } catch (Exception exception) { throw new IllegalStateException(exception); }
     }
 
-    private record ImportItem(String stem, String type, String primarySkill, String difficulty, List<String> secondarySkills) { }
     private record Classification(String type, String skill, String difficulty) { }
-    private record ParseBatch(List<ImportItem> items, List<ImportDiagnostic> errors) { }
     public record AnalysisResponse(List<AnalysisQuestion> questions, List<SkillSuggestion> newSkills, List<ImportDiagnostic> errors) { }
     public record AnalysisQuestion(String stem, String type, String primarySkill, List<String> secondarySkills, String difficulty, List<String> tags, String idealAnswer, String status, String errorCode) { }
     public record SkillSuggestion(String id, String displayName, List<String> aliases, List<Integer> questionIndexes) { }

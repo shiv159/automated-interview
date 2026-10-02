@@ -24,10 +24,6 @@ export class ReportComponent implements OnInit {
   readonly message = signal("");
   readonly report = signal<Report | null>(null);
   expanded = new Set<number>();
-  readonly profileWeight = 0.3;
-  readonly interviewWeight = 0.7;
-  readonly technicalWeight = 0.8;
-  readonly behavioralWeight = 0.2;
   async ngOnInit() {
     if (!this.id) {
       this.router.navigate(["/"]);

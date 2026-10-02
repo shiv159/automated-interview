@@ -3,6 +3,7 @@ import { FormsModule } from "@angular/forms";
 import { Router, RouterLink } from "@angular/router";
 import { SessionService, Session, SkillClaim } from "../../services/session.service";
 import { ApiErrorService } from "../../services/api-error.service";
+import { skillClaims } from "../../services/skill-groups";
 
 @Component({
   selector: "app-candidate-review",
@@ -114,26 +115,13 @@ export class CandidateReviewComponent implements OnInit {
     );
   }
   get matchedClaims(): SkillClaim[] {
-    const session = this.result();
-    return session
-      ? session.jobSkills.filter((claim) =>
-          session.matchedSkills.includes(claim.skillId),
-        )
-      : [];
+    return skillClaims(this.result(), "matched");
   }
   get missingClaims(): SkillClaim[] {
-    const session = this.result();
-    return session
-      ? session.jobSkills.filter((claim) =>
-          session.missingSkills.includes(claim.skillId),
-        )
-      : [];
+    return skillClaims(this.result(), "missing");
   }
   get additionalClaims(): SkillClaim[] {
-    const session = this.result();
-    if (!session) return [];
-    const jobIds = new Set(session.jobSkills.map((claim) => claim.skillId));
-    return session.resumeSkills.filter((claim) => !jobIds.has(claim.skillId));
+    return skillClaims(this.result(), "additional");
   }
   private validCandidateFile(file: File): boolean {
     return file.size <= 2 * 1024 * 1024 && /\.(pdf|docx|txt)$/i.test(file.name);
