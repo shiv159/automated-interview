@@ -14,6 +14,7 @@ env:
   GCP_REGION: ${{ vars.GCP_REGION }}
   GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
   GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+  GCP_RUNTIME_SERVICE_ACCOUNT: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
   AR_REPOSITORY: ${{ vars.AR_REPOSITORY }}
   BACKEND_SERVICE_NAME: automated-interview-backend
   FRONTEND_SERVICE_NAME: automated-interview-frontend
@@ -134,7 +135,7 @@ jobs:
           gcloud run deploy "${BACKEND_SERVICE_NAME}" \
             --project "${GCP_PROJECT_ID}" \
             --region "${GCP_REGION}" \
-            --service-account "${GCP_SERVICE_ACCOUNT}" \
+            --service-account "${GCP_RUNTIME_SERVICE_ACCOUNT}" \
             --image "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${AR_REPOSITORY}/${BACKEND_SERVICE_NAME}:${GITHUB_SHA}" \
             --platform managed \
             --allow-unauthenticated \

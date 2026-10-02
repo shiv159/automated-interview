@@ -13,7 +13,7 @@ class AiConfigurationValidatorTest {
 
     @Test
     void aiProfilesRequireRetentionAcknowledgement() {
-        assertThrows(IllegalStateException.class, () -> AiConfigurationValidator.validate(false, "stub", "ai", "local", "intervu-ai-20260704-8f3c"));
+        assertThrows(IllegalStateException.class, () -> AiConfigurationValidator.validate(false, "stub", "ai", "local", "test-project"));
     }
 
     @Test
@@ -26,6 +26,6 @@ class AiConfigurationValidatorTest {
 
     @Test
     void aiProfilesAcceptConfiguredVertexProjectId() {
-        assertDoesNotThrow(() -> AiConfigurationValidator.validate(true, "ai", "disabled", "local", "intervu-ai-20260704-8f3c"));
+        assertDoesNotThrow(() -> AiConfigurationValidator.validate(true, "ai", "disabled", "local", "test-project"));
     }
 }

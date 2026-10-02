@@ -164,7 +164,7 @@ erDiagram
 
 ## Run locally
 
-1. Copy `.env.example` to `.env`. The example file is already wired to `VERTEX_PROJECT_ID=intervu-ai-20260704-8f3c`; keep that value or replace it with your own Vertex project. Run `gcloud auth application-default login` once; Compose mounts the local ADC file into the backend and refreshes access tokens automatically. Never commit `.env` or Google credential files.
+1. Copy `.env.example` to `.env` and set `VERTEX_PROJECT_ID` to the dedicated Google Cloud project used by this deployment. Run `gcloud auth application-default login` once; Compose mounts the local ADC file into the backend and refreshes access tokens automatically. Never commit `.env` or Google credential files.
 2. Start PostgreSQL/pgvector and the backend:
 
 ```powershell
@@ -186,25 +186,33 @@ Health check: `http://127.0.0.1:4200/api/health`
 
 ### Google Cloud deployment secrets
 
-The Cloud Run deployment workflow synchronizes the database credentials and question-bank API key from GitHub Secrets into Google Secret Manager, then deploys Cloud Run using Secret Manager references. Create the secrets once in the target project and grant both identities the minimum required access:
+The Cloud Run deployment workflow synchronizes the database credentials, question-bank API key, and Aiven Kafka credentials from GitHub Secrets into Google Secret Manager, then deploys Cloud Run using Secret Manager references. Create these secrets once in the target project and grant both identities the minimum required access:
 
 ```powershell
 gcloud secrets create automated-interview-database-url --replication-policy=automatic
 gcloud secrets create automated-interview-database-username --replication-policy=automatic
 gcloud secrets create automated-interview-database-password --replication-policy=automatic
 gcloud secrets create automated-interview-question-bank-api-key --replication-policy=automatic
+gcloud secrets create automated-interview-kafka-bootstrap-servers --replication-policy=automatic
+gcloud secrets create automated-interview-kafka-username --replication-policy=automatic
+gcloud secrets create automated-interview-kafka-password --replication-policy=automatic
+gcloud secrets create automated-interview-kafka-ca-certificate --replication-policy=automatic
 
 "<database-url>" | gcloud secrets versions add automated-interview-database-url --data-file=-
 "<database-username>" | gcloud secrets versions add automated-interview-database-username --data-file=-
 "<database-password>" | gcloud secrets versions add automated-interview-database-password --data-file=-
 "<question-bank-api-key>" | gcloud secrets versions add automated-interview-question-bank-api-key --data-file=-
+"<kafka-bootstrap-servers>" | gcloud secrets versions add automated-interview-kafka-bootstrap-servers --data-file=-
+"<kafka-username>" | gcloud secrets versions add automated-interview-kafka-username --data-file=-
+"<kafka-password>" | gcloud secrets versions add automated-interview-kafka-password --data-file=-
+"<kafka-ca-certificate>" | gcloud secrets versions add automated-interview-kafka-ca-certificate --data-file=-
 
 gcloud secrets add-iam-policy-binding automated-interview-database-url `
   --member="serviceAccount:<cloud-run-runtime-service-account>" `
   --role="roles/secretmanager.secretAccessor"
 ```
 
-Repeat the final IAM command for the other three secrets. The runtime service account—not the GitHub Actions identity—must have `roles/secretmanager.secretAccessor`. Do not put secret values in workflow YAML, GitHub command arguments, or committed `.env` files.
+Repeat the final IAM command for the other seven secrets. The runtime service account—not the GitHub Actions identity—must have `roles/secretmanager.secretAccessor`. Do not put secret values in workflow YAML, GitHub command arguments, or committed `.env` files.
 
 Grant the GitHub Actions deployment service account permission to add versions. In this repository it is the same service account configured by `GCP_SERVICE_ACCOUNT`:
 
@@ -214,7 +222,7 @@ gcloud secrets add-iam-policy-binding automated-interview-database-url `
   --role="roles/secretmanager.secretVersionAdder"
 ```
 
-Repeat this command for the other three secrets. Add these GitHub repository secrets: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, and `QUESTION_BANK_API_KEY`. Each deployment creates a new Secret Manager version from those GitHub values; Cloud Run continues to read `latest`.
+Repeat this command for the other seven secrets. Add these GitHub repository secrets: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `QUESTION_BANK_API_KEY`, `AIVEN_KAFKA_BOOTSTRAP_SERVERS`, `AIVEN_KAFKA_USERNAME`, `AIVEN_KAFKA_PASSWORD`, and `AIVEN_KAFKA_CA_CERTIFICATE`. Each deployment creates a new Secret Manager version from those GitHub values; Cloud Run continues to read `latest`.
 
 Candidate routes are `/`, `/sessions/:id/analysis`,
 `/sessions/:id/interview`, and `/sessions/:id/report`. The owner question-bank
@@ -246,8 +254,8 @@ For local Vertex setup:
 
 ```powershell
 gcloud auth application-default login
-gcloud auth application-default set-quota-project intervu-ai-20260704-8f3c
-gcloud services enable aiplatform.googleapis.com --project intervu-ai-20260704-8f3c
+gcloud auth application-default set-quota-project automated-interview-20261002
+gcloud services enable aiplatform.googleapis.com --project automated-interview-20261002
 ```
 
 Spring AI uses Application Default Credentials for Vertex mode, avoiding

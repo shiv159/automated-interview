@@ -21,6 +21,6 @@ public final class AiConfigurationValidator {
         if (aiEnabled && !retentionAcknowledged)
             throw new IllegalStateException("AI_DATA_RETENTION_ACKNOWLEDGED must be true when an AI profile is enabled");
         if (aiEnabled && (projectId == null || projectId.isBlank()))
-            throw new IllegalStateException("VERTEX_PROJECT_ID must be set when APP_ANSWER_EVALUATION_PROFILE, APP_QUESTION_ENRICHMENT_PROFILE, or APP_EMBEDDING_PROFILE enables ai; set VERTEX_PROJECT_ID=intervu-ai-20260704-8f3c and ensure ADC is available");
+            throw new IllegalStateException("VERTEX_PROJECT_ID must be set when APP_ANSWER_EVALUATION_PROFILE, APP_QUESTION_ENRICHMENT_PROFILE, or APP_EMBEDDING_PROFILE enables ai; set VERTEX_PROJECT_ID to the target Google Cloud project and ensure ADC is available");
     }
 }
