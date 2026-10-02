@@ -37,6 +37,10 @@ spring:
       sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username='${AIVEN_KAFKA_USERNAME:}' password='${AIVEN_KAFKA_PASSWORD:}';
       ssl.truststore.type: ${SPRING_KAFKA_SSL_TRUSTSTORE_TYPE:PEM}
       ssl.truststore.certificates: ${AIVEN_KAFKA_CA_CERTIFICATE:}
+      reconnect.backoff.ms: ${SPRING_KAFKA_RECONNECT_BACKOFF_MS:1000}
+      reconnect.backoff.max.ms: ${SPRING_KAFKA_RECONNECT_BACKOFF_MAX_MS:30000}
+      retry.backoff.ms: ${SPRING_KAFKA_RETRY_BACKOFF_MS:1000}
+      retry.backoff.max.ms: ${SPRING_KAFKA_RETRY_BACKOFF_MAX_MS:30000}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer

@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.junit.jupiter.api.Test;
 
 class QuestionIndexingRecoveryJobTest {
@@ -24,5 +25,16 @@ class QuestionIndexingRecoveryJobTest {
         verify(publisher).publishNow(new QuestionIndexingEvent(deleteId, QuestionIndexingEvent.Operation.DELETE));
         verify(state).queueRecovery(upsertId);
         verify(state).queueRecovery(deleteId);
+    }
+
+    @Test
+    void skipsRecoveryWhenDatabaseIsUnavailable() {
+        var state = org.mockito.Mockito.mock(QuestionIndexingStateRepository.class);
+        var publisher = org.mockito.Mockito.mock(QuestionIndexingPublisher.class);
+        when(state.recoveryCandidates()).thenThrow(new DataAccessResourceFailureException("database unavailable"));
+
+        new QuestionIndexingRecoveryJob(state, publisher).recover();
+
+        org.mockito.Mockito.verifyNoInteractions(publisher);
     }
 }
