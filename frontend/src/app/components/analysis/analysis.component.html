@@ -37,7 +37,7 @@
         <article class="metric-card">
           <span class="metric-label">Profile match</span
           ><strong>{{ current.profileMatch }}%</strong
-          ><small>Role alignment</small>
+          ><small>Match across supported skills</small>
         </article>
         <article class="metric-card">
           <span class="metric-label">Difficulty</span
@@ -104,13 +104,26 @@
       ) {
         <section class="evidence" aria-label="Additional requirements">
           <h2>Additional requirements</h2>
-          <p>
-            {{
-              current.softSkillRequirements
-                .concat(current.domainRequirements)
-                .join(", ")
-            }}
-          </p>
+          @if (current.softSkillRequirements.length) {
+            <article>
+              <h3>Ways of working</h3>
+              <ul class="requirement-list">
+                @for (requirement of current.softSkillRequirements; track requirement) {
+                  <li>{{ requirement }}</li>
+                }
+              </ul>
+            </article>
+          }
+          @if (current.domainRequirements.length) {
+            <article>
+              <h3>Domain knowledge</h3>
+              <ul class="requirement-list">
+                @for (requirement of current.domainRequirements; track requirement) {
+                  <li>{{ requirement }}</li>
+                }
+              </ul>
+            </article>
+          }
         </section>
       }
       <div class="actions analysis-actions">

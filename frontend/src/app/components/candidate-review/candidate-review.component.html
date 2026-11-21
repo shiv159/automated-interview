@@ -53,8 +53,7 @@
       </form>
     </section>
   </section>
-  <p class="notice page">Your synthetic job description and résumé are sent to the configured Vertex AI model for skill
-    analysis. Do not upload confidential material.</p>
+  <p class="notice page">Your job description and résumé are sent to the configured Vertex AI model for analysis. Upload only synthetic or non-confidential files.</p>
   <p class="status" aria-live="polite">{{ message() }}</p>
   @if (previewKind) {<div class="modal-backdrop" (click)="previewKind = ''">
     <section class="question-modal preview-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
@@ -71,7 +70,7 @@
     <h2 id="result-title">Analysis ready</h2>
     <div class="result-grid">
       <article class="metric-card"><span class="metric-label">Profile match</span><strong>{{ session.profileMatch
-          }}%</strong><small>Role alignment</small></article>
+          }}%</strong><small>Match across supported skills</small></article>
       <article class="metric-card"><span class="metric-label">Difficulty</span><strong>{{ session.difficulty
           }}</strong><small>Recommended level</small></article>
       <article class="metric-card"><span class="metric-label">Skills matched</span><strong>{{
@@ -104,11 +103,11 @@
   @if (result(); as session) { @if (session.softSkillRequirements.length || session.domainRequirements.length) {
   <section class="evidence page" aria-label="Additional requirements">
     <h2>Additional requirements</h2>@if (session.softSkillRequirements.length) {<article>
-      <h3>Soft-skill expectations</h3>
-      <p>{{ session.softSkillRequirements.join(', ') }}</p>
+      <h3>Ways of working</h3>
+      <ul class="requirement-list">@for (requirement of session.softSkillRequirements; track requirement) {<li>{{ requirement }}</li>}</ul>
     </article>}@if (session.domainRequirements.length) {<article>
-      <h3>Domain requirements</h3>
-      <p>{{ session.domainRequirements.join(', ') }}</p>
+      <h3>Domain knowledge</h3>
+      <ul class="requirement-list">@for (requirement of session.domainRequirements; track requirement) {<li>{{ requirement }}</li>}</ul>
     </article>}
   </section> } }
 </main>

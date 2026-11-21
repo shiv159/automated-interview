@@ -88,11 +88,13 @@ input:focus, textarea:focus { outline: 0; border-color: var(--soft); box-shadow:
 .evidence article + article { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--subtle-border); }
 .evidence p { color: var(--muted); font-size: 13px; }
 .evidence strong { color: var(--soft); font-weight: var(--font-weight-medium); }
+.requirement-list { display: grid; gap: 8px; margin: 0 0 20px; padding-left: 20px; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .progress-track { height: 3px; margin-top: 24px; background: var(--color-graphite); }
 .progress-track span { display: block; height: 100%; background: var(--accent); }
 .progress-meta { display: flex; justify-content: space-between; margin: 10px 0 24px; color: var(--muted); font-family: ui-monospace, monospace; font-size: 11px; }
 .question-card { margin-top: 20px; padding: clamp(22px, 5vw, 48px); border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .question-card h2 { max-width: 780px; margin: 32px 0 16px; font-size: clamp(28px, 4vw, 48px); line-height: 1.05; }
+@media (max-width: 800px) { .question-card h2 { max-width: 34ch; line-height: 1.2; } }
 .question-meta, .interview-tools, .answer-tools, .star-checklist, .filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .question-number { margin-left: auto; color: var(--muted); font-family: ui-monospace, monospace; font-size: 14px; }
 .prompt-note { color: var(--muted); line-height: 1.6; }
