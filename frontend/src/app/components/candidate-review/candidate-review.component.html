@@ -26,7 +26,7 @@
           <p class="kicker">Start a new review</p>
           <h2>Bring your materials</h2>
         </div><span>{{ result() ? '2 of 2' : '1 of 2' }}</span>
-      </div><button class="demo-button" type="button" (click)="loadDemo()">↗ Load demo sample · Java / Spring
+      </div><button class="demo-button" type="button" (click)="loadDemo()">Load demo sample · Java / Spring
         role</button>
       <form (ngSubmit)="startReview()" novalidate><label>Job description<div class="dropzone"
             [class.dragging]="dragTarget === 'job'" (dragover)="$event.preventDefault(); dragTarget = 'job'"
@@ -48,7 +48,7 @@
             placeholder="e.g. Senior Java engineer"></label><label>Years of relevant experience<input name="years"
             type="number" min="0" max="30" step="1" [(ngModel)]="yearsExperience" required></label><label
           class="check"><input name="attested" type="checkbox" [(ngModel)]="syntheticDataAttested" required> These files
-          are synthetic or non-confidential.</label><button class="primary-button" type="submit" [disabled]="busy()">{{
+          are synthetic or non-confidential.</label><button class="primary-button candidate-submit" type="submit" [disabled]="busy()">{{
           busy() ? 'Analyzing…' : 'Start candidate review ↗' }}</button>
       </form>
     </section>

@@ -17,7 +17,7 @@ html { background: var(--color-void); }
 body { min-width: 320px; margin: 0; background: var(--color-void); }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
-button:disabled { cursor: wait; opacity: .55; }
+button:disabled { cursor: not-allowed; opacity: .55; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 a { color: var(--soft); }
 .shell { max-width: 1200px; min-height: 100vh; margin: 0 auto; padding: 20px 24px 48px; }
@@ -168,6 +168,8 @@ footer { display: flex; justify-content: space-between; max-width: 1200px; margi
   .table-row { grid-template-columns: 1fr; gap: 10px; }
   .row-actions { justify-content: start; }
   .import-panel { align-items: stretch; flex-direction: column; }
+  .upload-panel form { padding-bottom: 14px; }
+  .candidate-submit { position: sticky; bottom: 12px; z-index: 2; width: 100%; box-shadow: 0 0 0 10px var(--surface), 0 4px 18px rgba(0, 0, 0, .45); }
   footer { flex-direction: column; gap: 12px; }
 }
 @media (max-width: 480px) {

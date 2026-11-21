@@ -32,7 +32,7 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
-.undo-button:disabled { opacity: .55; }
+.undo-button:disabled { cursor: not-allowed; }
 .bank-state {
   min-height: 72px;
   padding: 16px 18px;
