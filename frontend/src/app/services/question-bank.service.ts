@@ -134,11 +134,10 @@ export class QuestionBankService {
     );
   }
 
-  async toggleStatus(question: QuestionSummary): Promise<void> {
-    const status = question.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+  async setStatus(questionId: string, status: "ACTIVE" | "INACTIVE"): Promise<void> {
     return firstValueFrom(
       this.http.patch<void>(
-        `/api/v1/question-bank/questions/${question.id}/status`,
+        `/api/v1/question-bank/questions/${questionId}/status`,
         { status },
       ),
     );

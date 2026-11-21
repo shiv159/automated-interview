@@ -1,10 +1,10 @@
 @if (showKeyModal()) {
-  <div class="key-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
-    <div class="key-modal">
-      <div class="key-modal-icon">🔒</div>
+  <div class="key-modal-backdrop" role="presentation">
+    <div class="key-modal" role="dialog" aria-modal="true" aria-labelledby="key-modal-title" #keyDialog (keydown)="keyDialogKeydown($event, keyDialog)">
       <h2 id="key-modal-title">Admin Access Required</h2>
       <p>Enter your Question Bank API key to unlock this workspace.</p>
       <form (ngSubmit)="submitKey()" novalidate>
+        <label for="admin-key-input">Question Bank API key</label>
         <input
           id="admin-key-input"
           class="key-input"
@@ -13,106 +13,209 @@
           [value]="keyInput()"
           (input)="keyInput.set(inputValue($event))"
           autocomplete="current-password"
+          aria-describedby="admin-key-hint"
           autofocus
         />
+        <small id="admin-key-hint">The key is kept for this browser session.</small>
         @if (keyError()) {
           <p class="key-error" role="alert">{{ keyError() }}</p>
         }
-        <button class="primary-button key-submit" type="submit">Unlock →</button>
+        <button class="primary-button key-submit" type="submit">Unlock workspace</button>
       </form>
     </div>
   </div>
 }
-<main class="shell">
-  <header class="topbar"><a class="brand" routerLink="/"><img class="brand-logo" src="logo.svg" alt="Intervu"><span class="brand-sub">practice lab</span></a>
-    <nav class="nav"><a routerLink="/">Candidate review</a><a class="active" routerLink="/question-bank">Question
-        bank</a></nav><span class="status-chip"><i></i> Owner workspace</span>
+
+<main class="shell question-bank-page">
+  <header class="topbar">
+    <a class="brand" routerLink="/"><img class="brand-logo" src="logo.svg" alt="Intervu"><span class="brand-sub">practice lab</span></a>
+    <nav class="nav"><a routerLink="/">Candidate review</a><a class="active" routerLink="/question-bank">Question bank</a></nav>
+    <span class="status-chip"><i></i> Owner workspace</span>
   </header>
+
   <section class="page wide">
-    <div class="section-head">
+    <div class="section-head bank-heading">
       <div>
         <p class="eyebrow">Repository <span>Technical &amp; behavioral catalog</span></p>
         <h1>Keep the signal sharp.</h1>
         <p class="lede">Explore, search, and import interview questions calibrated with evaluation rubrics.</p>
       </div>
-      <div class="actions"><button type="button" (click)="exportQuestions('json')">📦 Export JSON</button><button
-          type="button" (click)="exportQuestions('csv')">📊 Export CSV</button></div>
+      <div class="actions">
+        <button type="button" (click)="exportQuestions('json')" [disabled]="busy()">Export JSON</button>
+        <button type="button" (click)="exportQuestions('csv')" [disabled]="busy()">Export CSV</button>
+      </div>
     </div>
-    <form class="panel import-panel" (ngSubmit)="importQuestions()" novalidate><label>Import custom question stems<input
-          type="file" accept=".txt,.json,text/plain,application/json"
-          (change)="ownerFile = selectedFile($event)"></label><button class="primary-button"
-        type="submit" [disabled]="busy()">{{ busy() ? 'Analyzing…' : 'Analyze questions ↥' }}</button></form>
-    <p class="status" aria-live="polite">{{ message() }}</p>
-    @if (suggestions().length) {<section class="panel import-review">
-      <h2>Review detected skills</h2>
-      <p>Approve each new skill before importing its questions.</p>@for (skill of suggestions(); track skill.id)
-      {<label><input type="checkbox" [checked]="skill.approved" (change)="toggleSuggestion(skill)"> <input
-          [(ngModel)]="skill.displayName" [name]="'skill-name-' + skill.id" aria-label="Skill display name"> <input
-          [value]="skill.aliases.join(', ')" [name]="'skill-aliases-' + skill.id" aria-label="Skill aliases"
-              (input)="updateSuggestionAliases(skill, inputValue($event))"></label>}
-    </section>}
-    @if (draft().length) {<section class="panel import-review">
-      <h2>Question preview</h2>@for (question of draft(); track $index) {<article><strong>{{ question.stem
-          }}</strong><small>{{ question.status }} · {{ question.status === 'DUPLICATE' ? 'Already exists' :
-          question.type === 'BEHAVIORAL' ? 'Behavioral' : question.type === 'TECHNICAL' ? (question.primarySkill ||
-          'Technical skill unavailable') : 'Analysis unavailable' }}{{ question.secondarySkills.length ? ' · +' +
-          question.secondarySkills.join(', ') : '' }}{{ question.errorCode ? ' · ' + question.errorCode : ''
-          }}</small>@if (question.status === 'RETRYABLE') {<button type="button" (click)="retryAnalysis()"
-          [disabled]="busy()">Retry analysis</button>}</article>}<button class="primary-button" type="button"
-        (click)="commitDraft()" [disabled]="busy()">Approve and import valid questions</button>
-    </section>}
-    @if (bank(); as rows) {<div class="bank-stats">
-      <article><strong>{{ rows.total }}</strong><span>Total questions</span></article>
-      <article><strong>{{ rows.activeCount }}</strong><span>Active questions</span></article>
-      <article><strong>{{ rows.skillAreaCount }}</strong><span>Skill areas</span></article>
-    </div>
-    <section class="panel explorer" aria-label="Question bank explorer">
-      <div class="explorer-search"><input class="search" type="search"
-          placeholder="🔍  Search questions by keyword or skill..." [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" name="search"><span>Showing
-          <b>{{ filteredQuestions.length }}</b> of {{ rows.total }}</span></div>
-      <div class="filter-row"><b>SKILL:</b>@for (skill of skillOptions; track skill) {<button type="button"
-          [class.active]="skillFilter === skill" (click)="skillFilter = skill; applyFilters()">{{ displaySkill(skill) }}</button>}</div>
-      <div class="filter-row"><b>TIER:</b>@for (level of ['ALL','EASY','MEDIUM','HARD']; track level) {<button
-          type="button" [class.active]="difficultyFilter === level" (click)="difficultyFilter = level; applyFilters()">{{ level ===
-          'ALL' ? 'All Tiers' : level }}</button>}</div>
-      <div class="filter-row"><b>SOURCE:</b>@for (origin of ['ALL','SEED','OWNER_IMPORT']; track origin) {<button
-          type="button" [class.active]="originFilter === origin" (click)="originFilter = origin; applyFilters()">{{ origin === 'ALL' ?
-          'All Sources' : origin.replace('_', ' ') }}</button>}</div>
-    </section>
-    <div class="pagination"><button type="button" (click)="changePage(-1)" [disabled]="page() === 0">Previous</button><span>Page {{ page() + 1 }} of {{ rows.totalPages }}</span><button type="button" (click)="changePage(1)" [disabled]="page() + 1 >= rows.totalPages">Next</button></div>
-    <section class="panel question-table" aria-label="Question bank rows">
-      <div class="table-head"><span>Question stem</span><span>Coverage &amp;
-          level</span><span>Origin</span><span>Indexing</span><span>Actions</span></div>@for (question of filteredQuestions; track
-      question.id) {<article class="table-row" (click)="selectedQuestion = question">
-        <div><strong>{{ question.stem }}</strong><small>{{ question.origin }} · Updated: {{ question.updatedAt |
-            date:'mediumDate' }}</small></div><span class="coverage-tag">{{ displaySkill(question.primarySkill ||
-          'BEHAVIORAL') }}<small>{{ question.difficulty || 'All levels' }}</small></span><span class="tag">● {{
-          question.status }}</span><span class="indexing-tag" [attr.data-status]="question.indexingStatus">{{ indexingLabel(question.indexingStatus) }}</span>
-        <div class="row-actions"><button type="button" (click)="$event.stopPropagation(); copyQuestion(question)">📋
-            Copy</button>@if (question.origin === 'OWNER_IMPORT') {<button type="button"
-            (click)="$event.stopPropagation(); toggleStatus(question)" [disabled]="busy()">Toggle</button>}</div>
-      </article>} @empty {<p class="empty-state">No questions match these filters.</p>}
-    </section>}
-    @if (selectedQuestion) {<div class="modal-backdrop" role="presentation" (click)="selectedQuestion = null">
-      <section class="question-modal" role="dialog" aria-modal="true" aria-labelledby="question-detail-title"
-        (click)="$event.stopPropagation()">
-        <div class="panel-heading">
-          <div>
-            <p class="kicker">Question detail</p>
-            <h2 id="question-detail-title">{{ selectedQuestion.stem }}</h2>
-          </div><button type="button" (click)="selectedQuestion = null">Close</button>
+
+    @if (message() && !loadError()) {
+      <div class="status-feedback" [attr.data-kind]="messageKind()" [attr.role]="messageKind() === 'error' ? 'alert' : 'status'" [attr.aria-live]="messageKind() === 'error' ? 'assertive' : 'polite'">
+        <span>{{ message() }}</span>
+        @if (lastStatusChange()) {
+          <button type="button" class="undo-button" (click)="undoStatusChange()" [disabled]="busy()">Undo status change</button>
+        }
+      </div>
+    }
+
+    @if (!bank() && loading()) {
+      <div class="bank-state" role="status" aria-live="polite"><span class="loading-dot"></span>Loading the question bank…</div>
+    }
+    @if (!bank() && loadError()) {
+      <div class="bank-state bank-state-error" role="alert">
+        <div><strong>Question bank unavailable.</strong><span>{{ message() || 'Check your connection and try again.' }}</span></div>
+        <button type="button" class="ghost-button" (click)="loadBank()">Retry</button>
+      </div>
+    }
+
+    @if (bank(); as rows) {
+      <dl class="bank-stats" aria-label="Question bank totals">
+        <div><dt>Total questions</dt><dd>{{ rows.total }}</dd></div>
+        <div><dt>Active questions</dt><dd>{{ rows.activeCount }}</dd></div>
+        <div><dt>Skill areas</dt><dd>{{ rows.skillAreaCount }}</dd></div>
+      </dl>
+
+      <section class="panel explorer" aria-label="Question bank explorer" [attr.aria-busy]="loading()">
+        <div class="explorer-heading">
+          <h2>Question library</h2>
+          @if (hasActiveFilters) {
+            <button type="button" class="text-button" (click)="clearFilters()">Clear filters</button>
+          }
         </div>
-        <div class="detail-grid"><span><b>Primary skill</b>{{ displaySkill(selectedQuestion.primarySkill ||
-            'BEHAVIORAL') }}</span><span><b>Secondary skills</b>{{ formatTags(selectedQuestion.secondarySkills) ||
-            'None' }}</span><span><b>Difficulty</b>{{ selectedQuestion.difficulty || 'All levels'
-            }}</span><span><b>Origin</b>{{ selectedQuestion.origin }}</span></div>
-        <div class="evidence"><b>Tags</b>
-          <p>{{ formatTags(selectedQuestion.tags) || 'None' }}</p><b>Rubric</b>
-          <p>{{ formatTags(selectedQuestion.rubric) || 'No rubric available.' }}</p><b>Ideal answer</b>
-          <p>{{ selectedQuestion.idealAnswer || 'No ideal answer available.' }}</p><b>Indexing</b>
-          <p>{{ indexingLabel(selectedQuestion.indexingStatus) }}</p>
+        <div class="explorer-search">
+          <input class="search" type="search" placeholder="Search questions by keyword or skill…" [(ngModel)]="searchTerm" (ngModelChange)="scheduleSearch()" name="search" aria-label="Search questions by keyword or skill">
+          <span>Showing <b>{{ filteredQuestions.length }}</b> of {{ rows.total }}</span>
+        </div>
+        <div class="filter-row" aria-label="Filter by skill"><b>SKILL:</b>
+          @for (skill of skillOptions; track skill) {
+            <button type="button" [class.active]="skillFilter === skill" [attr.aria-pressed]="skillFilter === skill" (click)="skillFilter = skill; applyFilters()">{{ displaySkill(skill) }}</button>
+          }
+        </div>
+        <div class="filter-row" aria-label="Filter by difficulty"><b>DIFFICULTY:</b>
+          @for (level of ['ALL','EASY','MEDIUM','HARD']; track level) {
+            <button type="button" [class.active]="difficultyFilter === level" [attr.aria-pressed]="difficultyFilter === level" (click)="difficultyFilter = level; applyFilters()">{{ level === 'ALL' ? 'All levels' : level }}</button>
+          }
+        </div>
+        <div class="filter-row" aria-label="Filter by source"><b>SOURCE:</b>
+          @for (origin of ['ALL','SEED','OWNER_IMPORT']; track origin) {
+            <button type="button" [class.active]="originFilter === origin" [attr.aria-pressed]="originFilter === origin" (click)="originFilter = origin; applyFilters()">{{ origin === 'ALL' ? 'All sources' : origin.replace('_', ' ') }}</button>
+          }
         </div>
       </section>
-    </div>}
+
+      @if (loading() && rows) {
+        <p class="refresh-status" role="status" aria-live="polite"><span class="loading-dot"></span>Updating questions…</p>
+      }
+      @if (loadError() && rows) {
+        <div class="bank-state bank-state-error" role="alert">
+          <span>{{ message() || 'Could not refresh results. Showing the last successful list.' }}</span>
+          <button type="button" class="ghost-button" (click)="loadBank()">Retry</button>
+        </div>
+      }
+
+      <div class="pagination">
+        <button type="button" (click)="changePage(-1)" [disabled]="loading() || page() === 0">Previous</button>
+        <span>Page {{ rows.totalPages === 0 ? 0 : rows.page + 1 }} of {{ rows.totalPages }}</span>
+        <button type="button" (click)="changePage(1)" [disabled]="loading() || rows.page + 1 >= rows.totalPages">Next</button>
+      </div>
+
+      <section class="panel question-table" aria-label="Question bank rows" [attr.aria-busy]="loading()">
+        <div class="table-head"><span>Question stem</span><span>Coverage &amp; level</span><span>Origin</span><span>Indexing</span><span>Actions</span></div>
+        @for (question of filteredQuestions; track question.id) {
+          <article class="table-row">
+            <div class="question-copy">
+              <button type="button" class="question-row-open" [attr.aria-label]="'View question details: ' + question.stem" (click)="openQuestionDetail(question, $event)"><strong>{{ question.stem }}</strong></button>
+              <small>{{ question.origin === 'OWNER_IMPORT' ? 'Owner import' : 'Seed question' }} · Updated: {{ question.updatedAt | date:'mediumDate' }}</small>
+            </div>
+            <span class="coverage-tag">{{ displaySkill(question.primarySkill || 'BEHAVIORAL') }}<small>{{ question.difficulty || 'All levels' }}</small></span>
+            <span class="tag" [attr.data-status]="question.status">{{ question.status === 'ACTIVE' ? 'Active' : 'Inactive' }}</span>
+            <span class="indexing-tag" [attr.data-status]="question.indexingStatus" [attr.aria-label]="'Indexing status: ' + indexingLabel(question.indexingStatus)">{{ indexingLabel(question.indexingStatus) }}</span>
+            <div class="row-actions">
+              <button type="button" (click)="copyQuestion(question)" [attr.aria-label]="'Copy question: ' + question.stem">Copy</button>
+              @if (question.origin === 'OWNER_IMPORT') {
+                <button type="button" (click)="toggleStatus(question)" [disabled]="busy()" [attr.aria-label]="(question.status === 'ACTIVE' ? 'Deactivate' : 'Activate') + ' question: ' + question.stem">{{ question.status === 'ACTIVE' ? 'Deactivate' : 'Activate' }}</button>
+              }
+            </div>
+          </article>
+        } @empty {
+          <div class="empty-state">
+            <strong>{{ hasActiveFilters ? 'No questions match these filters.' : 'No questions in the bank yet.' }}</strong>
+            @if (hasActiveFilters) {
+              <p>Clear one or more filters to see questions again.</p>
+              <button type="button" class="text-button" (click)="clearFilters()">Clear filters</button>
+            } @else {
+              <p>Import a TXT or JSON file below to add questions.</p>
+            }
+          </div>
+        }
+      </section>
+
+      <form class="panel import-panel" (ngSubmit)="importQuestions()" novalidate>
+        <div class="import-copy">
+          <h2>Import custom questions</h2>
+          <p>Analyze a file, review each question, then approve what enters the bank.</p>
+          <details class="format-help">
+            <summary>View file format and example</summary>
+            <p>Use UTF-8 TXT with one question per line (at least 20 characters), or a JSON array of objects with a <code>stem</code> field. Files must be 64 KiB or smaller.</p>
+            <pre>&#123;"stem":"Describe a time you improved service reliability."&#125;</pre>
+          </details>
+        </div>
+        <label class="file-picker">Question file
+          <input type="file" accept=".txt,.json,text/plain,application/json" (change)="ownerFile = selectedFile($event)">
+          <small>{{ ownerFile?.name || 'No file selected' }}</small>
+        </label>
+        <button class="primary-button" type="submit" [disabled]="busy()">{{ busy() ? 'Analyzing…' : 'Analyze selected file' }}</button>
+      </form>
+
+      @if (suggestions().length) {
+        <section class="panel import-review">
+          <h2>Review detected skills</h2>
+          <p>Approve each new skill before importing its questions.</p>
+          @for (skill of suggestions(); track skill.id) {
+            <label class="suggestion-row"><input type="checkbox" [checked]="skill.approved" (change)="toggleSuggestion(skill)">
+              <input [(ngModel)]="skill.displayName" [name]="'skill-name-' + skill.id" aria-label="Skill display name">
+              <input [value]="skill.aliases.join(', ')" [name]="'skill-aliases-' + skill.id" aria-label="Skill aliases" (input)="updateSuggestionAliases(skill, inputValue($event))">
+            </label>
+          }
+        </section>
+      }
+      @if (analysisErrors().length) {
+        <section class="panel analysis-errors" aria-labelledby="analysis-errors-title">
+          <h2 id="analysis-errors-title">Questions that need attention</h2>
+          @for (error of analysisErrors(); track $index) {
+            <p>{{ error.line ? 'Line ' + error.line : error.item ? 'Item ' + error.item : 'File' }}: {{ error.message }}</p>
+          }
+        </section>
+      }
+      @if (draft().length) {
+        <section class="panel import-review">
+          <div class="panel-heading"><div><h2>Question preview</h2><p>Review the analysis before adding anything to the bank.</p></div>
+            <button type="button" class="ghost-button" (click)="clearDraft()" [disabled]="busy()">Discard review</button>
+          </div>
+          @for (question of draft(); track $index) {
+            <article class="draft-question"><strong>{{ question.stem }}</strong>
+              <small>{{ question.status === 'VALID' ? 'Ready to import' : analysisIssue(question) }}{{ question.type === 'BEHAVIORAL' ? ' · Behavioral' : question.type === 'TECHNICAL' ? ' · ' + (question.primarySkill || 'Technical') : '' }}{{ question.secondarySkills.length ? ' · +' + question.secondarySkills.join(', ') : '' }}</small>
+              @if (question.status === 'RETRYABLE') {<button type="button" class="text-button" (click)="retryAnalysis()" [disabled]="busy()">Retry file analysis</button>}
+            </article>
+          }
+          <button class="primary-button" type="button" (click)="commitDraft()" [disabled]="busy()">Approve and import valid questions</button>
+        </section>
+      }
+    }
+
+    @if (selectedQuestion; as question) {
+      <div class="modal-backdrop" role="presentation" (click)="closeQuestionDetail()">
+        <section class="question-modal" role="dialog" aria-modal="true" aria-labelledby="question-detail-title" tabindex="-1" #questionDialog (click)="$event.stopPropagation()" (keydown)="questionDialogKeydown($event)">
+          <div class="panel-heading">
+            <div><p class="kicker">Question detail</p><h2 id="question-detail-title">{{ question.stem }}</h2></div>
+            <button type="button" data-dialog-close (click)="closeQuestionDetail()">Close</button>
+          </div>
+          <div class="detail-grid">
+            <span><b>Primary skill</b>{{ displaySkill(question.primarySkill || 'BEHAVIORAL') }}</span>
+            <span><b>Secondary skills</b>{{ formatTags(question.secondarySkills) || 'None' }}</span>
+            <span><b>Difficulty</b>{{ question.difficulty || 'All levels' }}</span>
+            <span><b>Origin</b>{{ question.origin === 'OWNER_IMPORT' ? 'Owner import' : 'Seed question' }}</span>
+          </div>
+          <div class="evidence"><b>Tags</b><p>{{ formatTags(question.tags) || 'None' }}</p><b>Rubric</b><p>{{ formatTags(question.rubric) || 'No rubric available.' }}</p><b>Ideal answer</b><p>{{ question.idealAnswer || 'No ideal answer available.' }}</p><b>Indexing</b><p>{{ indexingLabel(question.indexingStatus) }}</p></div>
+        </section>
+      </div>
+    }
   </section>
 </main>
