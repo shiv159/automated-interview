@@ -70,11 +70,15 @@ public class InterviewService {
                 selected = searchTechnical(queryText, target.skillId(), session.difficulty(), used);
                 if (selected != null) break;
             }
+            if (selected == null) {
+                UUID fallbackId = findCompatibleRelational("TECHNICAL", null, null, used);
+                if (fallbackId != null) selected = loadQuestion(fallbackId, null, null);
+            }
             if (selected == null) break;
             technical.add(selected); used.add(selected.id());
         }
 
-        QuestionRow behavioral = searchBehavioral();
+        QuestionRow behavioral = searchBehavioral(used);
         if (behavioral != null) used.add(behavioral.id());
 
         List<QuestionRow> questions = new ArrayList<>(technical);
@@ -85,6 +89,10 @@ public class InterviewService {
                 TargetSkill target = targets.get((questions.size() + offset) % targets.size());
                 selected = searchTechnical(queryText(target, session.difficulty()), target.skillId(), session.difficulty(), used);
                 if (selected != null) break;
+            }
+            if (selected == null) {
+                UUID fallbackId = findCompatibleRelational("TECHNICAL", null, null, used);
+                if (fallbackId != null) selected = loadQuestion(fallbackId, null, null);
             }
             if (selected == null) break;
             questions.add(selected); used.add(selected.id());
@@ -113,19 +121,51 @@ public class InterviewService {
     private QuestionRow searchTechnical(String queryText, String skillId, String difficulty, Set<UUID> excludeIds) {
         UUID id = retrieval.select(queryText, "TECHNICAL", skillId, difficulty, List.copyOf(excludeIds));
         if (id == null && difficulty != null) {
-            // Fallback: match skill across any difficulty before giving up
+            // Fallback 1: match skill across any difficulty before giving up
             id = retrieval.select(queryText, "TECHNICAL", skillId, null, List.copyOf(excludeIds));
             if (id != null) {
                 return loadQuestion(id, skillId, null);
+            }
+        }
+        if (id == null) {
+            // Fallback 2: relational search for skill
+            id = findCompatibleRelational("TECHNICAL", skillId, difficulty, excludeIds);
+            if (id != null) return loadQuestion(id, skillId, difficulty);
+            if (difficulty != null) {
+                id = findCompatibleRelational("TECHNICAL", skillId, null, excludeIds);
+                if (id != null) return loadQuestion(id, skillId, null);
             }
         }
         return id == null ? null : loadQuestion(id, skillId, difficulty);
     }
 
     /** Searches the vector store for the best-matching ACTIVE BEHAVIORAL question. */
-    private QuestionRow searchBehavioral() {
-        UUID id = retrieval.select("behavioral communication teamwork problem solving reflection", "BEHAVIORAL", null, null, List.of());
+    private QuestionRow searchBehavioral(Set<UUID> excludeIds) {
+        UUID id = retrieval.select("behavioral teamwork problem solving communication", "BEHAVIORAL", null, null, List.copyOf(excludeIds));
+        if (id == null) {
+            id = findCompatibleRelational("BEHAVIORAL", null, null, excludeIds);
+        }
         return id == null ? null : loadQuestion(id, null, null);
+    }
+
+    private UUID findCompatibleRelational(String type, String skill, String difficulty, Set<UUID> excludeIds) {
+        String skillClause = skill == null ? "" : " AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))";
+        String diffClause = difficulty == null ? "" : " AND difficulty = :difficulty";
+        List<UUID> rows = jdbc.sql("""
+            SELECT id FROM question
+            WHERE status = 'ACTIVE' AND indexing_status = 'INDEXED'
+              AND type = :type
+            """ + skillClause + diffClause + """
+            ORDER BY created_at DESC LIMIT 10
+            """)
+            .param("type", type)
+            .param("skill", skill)
+            .param("difficulty", difficulty)
+            .query(UUID.class).list();
+        for (UUID candidate : rows) {
+            if (!excludeIds.contains(candidate)) return candidate;
+        }
+        return null;
     }
 
     private QuestionRow loadQuestion(UUID id, String skill, String difficulty) {
@@ -142,26 +182,10 @@ public class InterviewService {
     }
 
     private String queryText(TargetSkill target, String difficulty) {
-        StringBuilder query = new StringBuilder();
         if (target.displayName() != null && !target.displayName().isBlank()) {
-            query.append(target.displayName().strip());
+            return target.displayName().strip();
         }
-        if (difficulty != null && !difficulty.isBlank()) {
-            if (!query.isEmpty()) query.append(" ");
-            query.append(difficulty.strip());
-        }
-        String evidence = target.jobEvidence();
-        if (evidence != null && !evidence.isBlank()) {
-            String cleanEvidence = DocumentNormalizer.normalize(evidence).replaceAll("[\\r\\n]+", " ").strip();
-            if (cleanEvidence.length() > 150) {
-                cleanEvidence = cleanEvidence.substring(0, 150);
-            }
-            if (!cleanEvidence.isBlank()) {
-                if (!query.isEmpty()) query.append(" ");
-                query.append(cleanEvidence);
-            }
-        }
-        return query.toString().strip();
+        return target.skillId();
     }
 
     @Transactional
