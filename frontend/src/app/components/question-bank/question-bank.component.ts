@@ -1,4 +1,4 @@
-import { Component, ElementRef, inject, OnDestroy, OnInit, signal, ViewChild } from "@angular/core";
+import { ChangeDetectorRef, Component, ElementRef, inject, OnDestroy, OnInit, signal, ViewChild } from "@angular/core";
 import { DatePipe } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import { FormsModule } from "@angular/forms";
@@ -26,6 +26,7 @@ export class QuestionBankComponent implements OnDestroy, OnInit {
   private questionBankService = inject(QuestionBankService);
   private apiErrors = inject(ApiErrorService);
   private adminKey = inject(AdminKeyService);
+  private changeDetector = inject(ChangeDetectorRef);
 
   readonly busy = signal(false);
   readonly loading = signal(false);
@@ -348,14 +349,16 @@ export class QuestionBankComponent implements OnDestroy, OnInit {
   openQuestionDetail(question: QuestionSummary, event: Event): void {
     this.questionReturnFocusTarget = event.currentTarget as HTMLElement;
     this.selectedQuestion = question;
-    requestAnimationFrame(() => this.questionDialog?.nativeElement.querySelector<HTMLElement>("[data-dialog-close]")?.focus());
+    this.changeDetector.detectChanges();
+    this.questionDialog?.nativeElement.querySelector<HTMLElement>("[data-dialog-close]")?.focus();
   }
 
   closeQuestionDetail(): void {
     this.selectedQuestion = null;
     const target = this.questionReturnFocusTarget;
     this.questionReturnFocusTarget = null;
-    if (target) requestAnimationFrame(() => target.focus());
+    this.changeDetector.detectChanges();
+    target?.focus();
   }
 
   questionDialogKeydown(event: KeyboardEvent): void {
