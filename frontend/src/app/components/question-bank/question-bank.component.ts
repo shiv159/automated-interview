@@ -3,6 +3,7 @@ import { DatePipe } from "@angular/common";
 import { RouterLink } from "@angular/router";
 import { FormsModule } from "@angular/forms";
 import { HttpErrorResponse } from "@angular/common/http";
+import { debounceTime, Subject, takeUntil } from "rxjs";
 import { ApiErrorService } from "../../services/api-error.service";
 import { AdminKeyService } from "../../services/admin-key.service";
 import {
@@ -54,12 +55,17 @@ export class QuestionBankComponent implements OnDestroy, OnInit {
   originFilter = "ALL";
   selectedQuestion: QuestionSummary | null = null;
   private loadRequestId = 0;
-  private searchTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchSequence = 0;
+  private readonly searchChanges = new Subject<number>();
+  private readonly destroyed = new Subject<void>();
   private questionReturnFocusTarget: HTMLElement | null = null;
 
   @ViewChild("questionDialog") private questionDialog?: ElementRef<HTMLElement>;
 
   async ngOnInit(): Promise<void> {
+    this.searchChanges.pipe(debounceTime(250), takeUntil(this.destroyed)).subscribe((sequence) => {
+      if (sequence === this.searchSequence) void this.applyFilters();
+    });
     if (!this.adminKey.hasKey()) {
       this.showKeyModal.set(true);
     } else {
@@ -68,7 +74,9 @@ export class QuestionBankComponent implements OnDestroy, OnInit {
   }
 
   ngOnDestroy(): void {
-    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.destroyed.next();
+    this.destroyed.complete();
+    this.searchChanges.complete();
     this.loadRequestId++;
   }
 
@@ -117,23 +125,17 @@ export class QuestionBankComponent implements OnDestroy, OnInit {
   }
 
   async applyFilters(): Promise<void> {
-    if (this.searchTimer) {
-      clearTimeout(this.searchTimer);
-      this.searchTimer = null;
-    }
+    this.searchSequence++;
     this.page.set(0);
     await this.loadBank();
   }
 
   scheduleSearch(): void {
-    if (this.searchTimer) clearTimeout(this.searchTimer);
+    this.searchSequence++;
     this.loadRequestId++;
     this.loading.set(true);
     this.loadError.set(false);
-    this.searchTimer = setTimeout(() => {
-      this.searchTimer = null;
-      void this.applyFilters();
-    }, 250);
+    this.searchChanges.next(this.searchSequence);
   }
 
   clearFilters(): void {
@@ -198,11 +200,11 @@ export class QuestionBankComponent implements OnDestroy, OnInit {
     }
   }
 
-  async importQuestions(): Promise<void> {
+  async importQuestions() {
     await this.analyzeQuestions(false);
   }
 
-  async retryAnalysis(): Promise<void> {
+  async retryAnalysis() {
     await this.analyzeQuestions(true);
   }
 
@@ -346,14 +348,14 @@ export class QuestionBankComponent implements OnDestroy, OnInit {
   openQuestionDetail(question: QuestionSummary, event: Event): void {
     this.questionReturnFocusTarget = event.currentTarget as HTMLElement;
     this.selectedQuestion = question;
-    setTimeout(() => this.questionDialog?.nativeElement.querySelector<HTMLElement>("[data-dialog-close]")?.focus());
+    requestAnimationFrame(() => this.questionDialog?.nativeElement.querySelector<HTMLElement>("[data-dialog-close]")?.focus());
   }
 
   closeQuestionDetail(): void {
     this.selectedQuestion = null;
     const target = this.questionReturnFocusTarget;
     this.questionReturnFocusTarget = null;
-    setTimeout(() => target?.focus());
+    if (target) requestAnimationFrame(() => target.focus());
   }
 
   questionDialogKeydown(event: KeyboardEvent): void {
