@@ -4,7 +4,6 @@ An enterprise-grade, AI-assisted interview calibration platform that transforms 
 
 - **Live Frontend Application:** [https://automated-interview-frontend-948728427173.us-central1.run.app/](https://automated-interview-frontend-948728427173.us-central1.run.app/)
 - **Live Backend API:** [https://automated-interview-backend-948728427173.us-central1.run.app/](https://automated-interview-backend-948728427173.us-central1.run.app/)
-- **Question Bank Secret:** `Shivam@159`
 
 > **Note:** Use the built-in synthetic Java/Spring sample when testing the live demo. Do not upload confidential résumés or proprietary job descriptions.
 
