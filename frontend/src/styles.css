@@ -168,13 +168,14 @@ footer { display: flex; justify-content: space-between; max-width: 1200px; margi
   .table-row { grid-template-columns: 1fr; gap: 10px; }
   .row-actions { justify-content: start; }
   .import-panel { align-items: stretch; flex-direction: column; }
-  .upload-panel form { padding-bottom: 14px; }
-  .candidate-submit { position: sticky; bottom: 12px; z-index: 2; width: 100%; box-shadow: 0 0 0 10px var(--surface), 0 4px 18px rgba(0, 0, 0, .45); }
+  .upload-panel form { padding-bottom: 72px; }
+  .candidate-submit { position: fixed; right: 16px; bottom: 12px; left: 16px; z-index: 20; width: auto; box-shadow: 0 0 0 10px var(--surface), 0 4px 18px rgba(0, 0, 0, .45); }
   footer { flex-direction: column; gap: 12px; }
 }
 @media (max-width: 480px) {
   h1 { font-size: 48px; }
   .shell { padding: 12px; }
+  .candidate-submit { right: 12px; left: 12px; }
   .panel, .question-modal { padding: 18px; }
   .explorer-search { align-items: stretch; flex-direction: column; }
   .search { min-width: 100%; }
