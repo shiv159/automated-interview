@@ -48,7 +48,6 @@ The report provides a readiness score, profile match, technical and behavioral s
 
 ## Architecture Diagram
 
-![Automated Interview production stack](docs/architecture/automated-interview.png)
 
 ![Automated Interview production stack — dark theme](docs/architecture/automated-interview-dark.png)
 
