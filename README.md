@@ -46,6 +46,14 @@ The report provides a readiness score, profile match, technical and behavioral s
 - `fixtures/` — synthetic resumes, job descriptions, answers, and question-import samples.
 - `.github/workflows/deploy.yml` — test, container build, Secret Manager synchronization, and Cloud Run deployment.
 
+## Architecture Diagram
+
+![Automated Interview production stack](docs/architecture/automated-interview.png)
+
+![Automated Interview production stack — dark theme](docs/architecture/automated-interview-dark.png)
+
+[Open the interactive, self-contained HTML diagram](docs/architecture/automated-interview.html) · [Dark PNG](docs/architecture/automated-interview-dark.png)
+
 ## High-Level Application Flow
 
 The Automated Interview Platform automates the end-to-end technical interview lifecycle—from question curation and resume analysis to live interactive interviewing and AI-driven candidate evaluation.
