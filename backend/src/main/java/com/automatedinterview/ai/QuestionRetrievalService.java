@@ -25,16 +25,23 @@ import io.micrometer.core.instrument.MeterRegistry;
 @Service
 public class QuestionRetrievalService {
     private static final Logger log = LoggerFactory.getLogger(QuestionRetrievalService.class);
-    private static final double MIN_SCORE = 0.15;
+    private static final double MIN_SCORE = 0.0;
     /** RRF smoothing constant — standard default is 60. */
     private static final int RRF_K = 60;
     private static final String LEXICAL_QUERY = """
-            SELECT id, ts_rank(to_tsvector('simple', stem), plainto_tsquery('simple', :query)) AS rank
+            SELECT id,
+                   CASE WHEN :tsQuery = '' THEN 0.0
+                        ELSE ts_rank(to_tsvector('simple', stem), to_tsquery('simple', :tsQuery))
+                   END AS rank
             FROM question WHERE status = 'ACTIVE' AND indexing_status = 'INDEXED'
               AND type = :type AND (CAST(:skill AS text) IS NULL OR primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))
               AND (CAST(:difficulty AS text) IS NULL OR difficulty = :difficulty)
-              AND to_tsvector('simple', stem) @@ plainto_tsquery('simple', :query)
-            ORDER BY rank DESC LIMIT 10
+              AND (
+                  (CAST(:skill AS text) IS NOT NULL AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text))))
+                  OR :tsQuery = ''
+                  OR to_tsvector('simple', stem) @@ to_tsquery('simple', :tsQuery)
+              )
+            ORDER BY rank DESC, created_at DESC LIMIT 10
             """;
     private final VectorStore vectorStore;
     private final JdbcClient jdbc;
@@ -61,10 +68,12 @@ public class QuestionRetrievalService {
         try {
             List<Document> documents = vectorStore.similaritySearch(
                     SearchRequest.builder().query(query).topK(30).filterExpression(filter.build()).build());
+            log.info("retrieval_dense_raw query='{}' foundCount={}", query, documents.size());
             for (Document document : documents) {
                 try {
                     UUID id = extractDocumentId(document);
                     double score = document.getScore() != null ? document.getScore() : 1.0;
+                    log.info("retrieval_dense_doc id={} score={}", id, score);
                     if (id != null && !excluded.contains(id) && score >= MIN_SCORE) {
                         denseRanked.add(id);
                         denseScores.put(id, score);
@@ -81,7 +90,8 @@ public class QuestionRetrievalService {
         // --- Sparse / lexical retrieval (top-10 by ts_rank) ---
         List<UUID> sparseRanked = new ArrayList<>();
         try {
-            jdbc.sql(LEXICAL_QUERY).param("query", query).param("type", type).param("skill", skill).param("difficulty", difficulty)
+            String tsQuery = toOrTsQuery(query);
+            jdbc.sql(LEXICAL_QUERY).param("tsQuery", tsQuery).param("type", type).param("skill", skill).param("difficulty", difficulty)
                 .query((rs, row) -> rs.getObject("id", UUID.class)).list()
                 .forEach(id -> { if (!excluded.contains(id)) sparseRanked.add(id); });
         } catch (Exception e) {
@@ -145,5 +155,15 @@ public class QuestionRetrievalService {
     /** Returns true when {@code candidateId} should be excluded because it equals {@code excludedId}. */
     static boolean isExcluded(UUID candidateId, UUID excludedId) {
         return candidateId != null && candidateId.equals(excludedId);
+    }
+
+    static String toOrTsQuery(String query) {
+        if (query == null || query.isBlank()) return "";
+        String[] words = query.toLowerCase(java.util.Locale.ROOT).split("[^\\p{L}\\p{Nd}]+");
+        List<String> valid = new ArrayList<>();
+        for (String w : words) {
+            if (!w.isBlank()) valid.add(w);
+        }
+        return valid.isEmpty() ? "" : String.join(" | ", valid);
     }
 }

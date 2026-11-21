@@ -72,7 +72,7 @@ public class InterviewService {
             }
             if (selected == null) {
                 UUID fallbackId = findCompatibleRelational("TECHNICAL", null, null, used);
-                if (fallbackId != null) selected = loadQuestion(fallbackId, null, null);
+                if (fallbackId != null) selected = loadQuestion(fallbackId);
             }
             if (selected == null) break;
             technical.add(selected); used.add(selected.id());
@@ -92,7 +92,7 @@ public class InterviewService {
             }
             if (selected == null) {
                 UUID fallbackId = findCompatibleRelational("TECHNICAL", null, null, used);
-                if (fallbackId != null) selected = loadQuestion(fallbackId, null, null);
+                if (fallbackId != null) selected = loadQuestion(fallbackId);
             }
             if (selected == null) break;
             questions.add(selected); used.add(selected.id());
@@ -123,20 +123,15 @@ public class InterviewService {
         if (id == null && difficulty != null) {
             // Fallback 1: match skill across any difficulty before giving up
             id = retrieval.select(queryText, "TECHNICAL", skillId, null, List.copyOf(excludeIds));
-            if (id != null) {
-                return loadQuestion(id, skillId, null);
-            }
         }
         if (id == null) {
             // Fallback 2: relational search for skill
             id = findCompatibleRelational("TECHNICAL", skillId, difficulty, excludeIds);
-            if (id != null) return loadQuestion(id, skillId, difficulty);
-            if (difficulty != null) {
+            if (id == null && difficulty != null) {
                 id = findCompatibleRelational("TECHNICAL", skillId, null, excludeIds);
-                if (id != null) return loadQuestion(id, skillId, null);
             }
         }
-        return id == null ? null : loadQuestion(id, skillId, difficulty);
+        return id == null ? null : loadQuestion(id);
     }
 
     /** Searches the vector store for the best-matching ACTIVE BEHAVIORAL question. */
@@ -145,32 +140,37 @@ public class InterviewService {
         if (id == null) {
             id = findCompatibleRelational("BEHAVIORAL", null, null, excludeIds);
         }
-        return id == null ? null : loadQuestion(id, null, null);
+        return id == null ? null : loadQuestion(id);
     }
 
     private UUID findCompatibleRelational(String type, String skill, String difficulty, Set<UUID> excludeIds) {
-        String skillClause = skill == null ? "" : " AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))";
-        String diffClause = difficulty == null ? "" : " AND difficulty = :difficulty";
-        List<UUID> rows = jdbc.sql("""
+        StringBuilder sql = new StringBuilder("""
             SELECT id FROM question
             WHERE status = 'ACTIVE' AND indexing_status = 'INDEXED'
               AND type = :type
-            """ + skillClause + diffClause + """
-            ORDER BY created_at DESC LIMIT 10
-            """)
-            .param("type", type)
-            .param("skill", skill)
-            .param("difficulty", difficulty)
-            .query(UUID.class).list();
+            """);
+        if (skill != null) {
+            sql.append(" AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))");
+        }
+        if (difficulty != null) {
+            sql.append(" AND difficulty = :difficulty");
+        }
+        sql.append(" ORDER BY created_at DESC LIMIT 10");
+
+        var spec = jdbc.sql(sql.toString()).param("type", type);
+        if (skill != null) spec = spec.param("skill", skill);
+        if (difficulty != null) spec = spec.param("difficulty", difficulty);
+
+        List<UUID> rows = spec.query(UUID.class).list();
         for (UUID candidate : rows) {
             if (!excludeIds.contains(candidate)) return candidate;
         }
         return null;
     }
 
-    private QuestionRow loadQuestion(UUID id, String skill, String difficulty) {
+    private QuestionRow loadQuestion(UUID id) {
         return jdbc.sql(QUESTION_LOOKUP_QUERY)
-            .param("id", id).param("skill", skill).param("difficulty", difficulty).query(this::question).optional().orElse(null);
+            .param("id", id).param("skill", (String) null).param("difficulty", (String) null).query(this::question).optional().orElse(null);
     }
 
     public static String questionLookupQuery() {
