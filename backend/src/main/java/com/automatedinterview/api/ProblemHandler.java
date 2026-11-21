@@ -25,8 +25,15 @@ public class ProblemHandler {
     private static final Logger log = LoggerFactory.getLogger(ProblemHandler.class);
     @ExceptionHandler(SessionService.SessionInputException.class)
     ResponseEntity<Problem> input(SessionService.SessionInputException exception, HttpServletRequest request) {
-        int status = exception.code().equals("INVALID_SESSION_TOKEN") ? 401 : exception.code().equals("SESSION_EXPIRED") ? 410 : exception.code().equals("SESSION_NOT_FOUND") ? 404 : exception.code().equals("DOCUMENT_LIMIT_EXCEEDED") ? 413 : exception.code().equals("UNSUPPORTED_DOCUMENT") ? 415 : exception.code().equals("ATTESTATION_REQUIRED") || exception.code().equals("INVALID_EXPERIENCE")
-            ? 400 : exception.code().equals("NO_SUPPORTED_SKILLS") ? 400 : 400;
+        int status = switch (exception.code()) {
+            case "INVALID_SESSION_TOKEN" -> 401;
+            case "SESSION_EXPIRED" -> 410;
+            case "SESSION_NOT_FOUND" -> 404;
+            case "DOCUMENT_LIMIT_EXCEEDED" -> 413;
+            case "UNSUPPORTED_DOCUMENT" -> 415;
+            case "ATTESTATION_REQUIRED", "INVALID_EXPERIENCE", "NO_SUPPORTED_SKILLS" -> 400;
+            default -> 400;
+        };
         return response(exception.code(), status, request);
     }
 

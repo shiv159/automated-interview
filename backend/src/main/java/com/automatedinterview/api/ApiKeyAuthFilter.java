@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 /**
  * Protects all /api/v1/question-bank/** routes with an API key.
@@ -50,7 +52,9 @@ public class ApiKeyAuthFilter extends OncePerRequestFilter {
         }
 
         String provided = request.getHeader(HEADER);
-        if (!expectedKey.equals(provided)) {
+        byte[] expectedBytes = expectedKey.getBytes(StandardCharsets.UTF_8);
+        byte[] providedBytes = provided == null ? new byte[0] : provided.getBytes(StandardCharsets.UTF_8);
+        if (!MessageDigest.isEqual(expectedBytes, providedBytes)) {
             log.warn("question_bank_auth_rejected method={} path={} ip={}",
                     request.getMethod(), request.getRequestURI(), request.getRemoteAddr());
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

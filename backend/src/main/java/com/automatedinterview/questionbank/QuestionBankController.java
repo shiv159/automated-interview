@@ -48,8 +48,12 @@ public class QuestionBankController {
     }
 
     @PatchMapping("/questions/{id}/status")
-    public ResponseEntity<Void> status(@PathVariable UUID id, @RequestBody StatusRequest request) {
-        imports.deactivate(id, request.status()); return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> status(@PathVariable UUID id, @RequestBody(required = false) StatusRequest request) {
+        if (request == null || request.status() == null || request.status().isBlank()) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        imports.deactivate(id, request.status());
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping
@@ -94,7 +98,14 @@ public class QuestionBankController {
         return ResponseEntity.ok(json.writeValueAsString(rows));
     }
 
-    private static String csv(String value) { return "\"" + String.valueOf(value == null ? "" : value).replace("\"", "\"\"") + "\""; }
+    private static String csv(String value) {
+        if (value == null) return "\"\"";
+        String text = value.replace("\"", "\"\"");
+        if (!text.isEmpty() && "=+-@\t\r".indexOf(text.charAt(0)) >= 0) {
+            text = "'" + text;
+        }
+        return "\"" + text + "\"";
+    }
 
     public record QuestionBankResponse(List<QuestionSummary> questions, long total, long activeCount, long skillAreaCount, List<CoverageBucket> coverage, List<SkillOption> skills, int page, int size, int totalPages) { }
     public record SkillOption(String id, String displayName, List<String> aliases) { }

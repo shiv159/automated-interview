@@ -43,8 +43,8 @@ public class InterviewService {
     @Transactional
     public QuestionResponse start(UUID sessionId, String token) {
         SessionRow session = session(sessionId, token);
-        if (session.state().equals("INTERVIEWING")) return current(sessionId, token);
-        if (!session.state().equals("READY")) throw new InterviewException("INVALID_SESSION_STATE", 409);
+        if ("INTERVIEWING".equals(session.state())) return current(sessionId, token);
+        if (!"READY".equals(session.state())) throw new InterviewException("INVALID_SESSION_STATE", 409);
         List<TargetSkill> targets = jdbc.sql("""
             SELECT ss.skill_id, s.display_name, ss.importance, ss.matched, ss.evidence AS job_evidence,
                    COALESCE(resume.evidence, '') AS resume_evidence
@@ -248,14 +248,14 @@ public class InterviewService {
 
     public ReportResponse report(UUID sessionId, String token) {
         SessionRow session = session(sessionId, token);
-        if (!session.state().equals("REPORT_READY")) throw new InterviewException("REPORT_NOT_READY", 409);
+        if (!"REPORT_READY".equals(session.state())) throw new InterviewException("REPORT_NOT_READY", 409);
         List<EvaluatedQuestion> evaluations = jdbc.sql("""
             SELECT sq.position, sq.type, sq.primary_skill, sq.stem, sq.criteria, e.criteria_scores, e.score, e.strengths, e.improvements
             FROM session_question sq JOIN evaluation e ON e.session_question_id = sq.id
             WHERE sq.session_id = :sessionId ORDER BY sq.position
             """).param("sessionId", sessionId).query((rs, row) -> new EvaluatedQuestion(rs.getInt("position"), rs.getString("type"), rs.getString("primary_skill"), rs.getString("stem"), rs.getString("criteria"), parseCriteriaScores(rs.getString("criteria_scores")), rs.getDouble("score"), rs.getString("strengths"), rs.getString("improvements"))).list();
-        double technical = evaluations.stream().filter(item -> item.type().equals("TECHNICAL")).mapToDouble(EvaluatedQuestion::score).average().orElse(0) * 10;
-        double behavioral = evaluations.stream().filter(item -> item.type().equals("BEHAVIORAL")).mapToDouble(EvaluatedQuestion::score).findFirst().orElse(0) * 10;
+        double technical = evaluations.stream().filter(item -> "TECHNICAL".equals(item.type())).mapToDouble(EvaluatedQuestion::score).average().orElse(0) * 10;
+        double behavioral = evaluations.stream().filter(item -> "BEHAVIORAL".equals(item.type())).mapToDouble(EvaluatedQuestion::score).findFirst().orElse(0) * 10;
         double interview = technical * .8 + behavioral * .2;
         double readiness = Math.round((session.profileMatch() * .3 + interview * .7) * 10) / 10.0;
         String label = readiness >= 80 ? "Ready" : readiness >= 65 ? "Nearly Ready" : readiness >= 50 ? "Developing" : "Significant Gaps";

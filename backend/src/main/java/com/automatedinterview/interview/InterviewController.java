@@ -23,7 +23,10 @@ public class InterviewController {
 
     @PostMapping("/questions/{instanceId}/answers")
     public InterviewService.AnswerResponse answer(@PathVariable UUID sessionId, @PathVariable UUID instanceId,
-        @CookieValue(name = "AIP_SESSION", required = false) String token, @RequestBody AnswerRequest request) {
+        @CookieValue(name = "AIP_SESSION", required = false) String token, @RequestBody(required = false) AnswerRequest request) {
+        if (request == null || request.answer() == null) {
+            throw new InterviewService.InterviewException("INVALID_ANSWER", 400);
+        }
         return service.answer(sessionId, instanceId, token, request.answer());
     }
 

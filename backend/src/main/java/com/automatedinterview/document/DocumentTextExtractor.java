@@ -8,6 +8,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.zip.ZipInputStream;
 
 import org.springframework.ai.document.Document;
@@ -107,8 +108,7 @@ public class DocumentTextExtractor {
         return documents.stream()
                 .map(Document::getText)
                 .filter(t -> t != null && !t.isBlank())
-                .reduce((a, b) -> a + "\n" + b)
-                .orElse("");
+                .collect(Collectors.joining("\n"));
     }
 
     /** Checks that the DOCX ZIP contains the required structural entries. */

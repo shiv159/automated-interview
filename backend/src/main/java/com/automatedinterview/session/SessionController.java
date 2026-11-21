@@ -29,10 +29,12 @@ public class SessionController {
         @RequestParam MultipartFile resume,
         @RequestParam int yearsExperience,
         @RequestParam boolean syntheticDataAttested,
-        @RequestParam(defaultValue = "") String roleTitle) {
+        @RequestParam(defaultValue = "") String roleTitle,
+        HttpServletRequest request) {
         SessionService.CreatedSession created = service.create(jobDescription, resume, yearsExperience, syntheticDataAttested, roleTitle);
+        boolean isSecure = request.isSecure() || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto"));
         ResponseCookie cookie = ResponseCookie.from("AIP_SESSION", created.token())
-            .httpOnly(true).sameSite("Strict").path("/").maxAge(7200).build();
+            .httpOnly(true).sameSite("Strict").secure(isSecure).path("/").maxAge(7200).build();
         return ResponseEntity.status(201).header(HttpHeaders.SET_COOKIE, cookie.toString()).body(created.response());
     }
 }
