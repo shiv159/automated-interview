@@ -106,7 +106,31 @@ public class VectorSyncService {
         metadata.put("embedding_model", embeddingModel);
         metadata.put("embedding_profile", embeddingProfile);
         metadata.put("embedding_dimensions", embeddingDimensions);
-        return new Document(id.toString(), stem, metadata);
+        // Store stem separately in metadata so retrieval / callers can still read it
+        metadata.put("stem",          stem);
+        return new Document(id.toString(), buildEmbeddingText(stem, primarySkill, difficulty, tags), metadata);
+    }
+
+    /**
+     * Composes a richer semantic text for embedding by combining the question stem with
+     * its primary skill, difficulty, and topic tags. This gives the dense vector a broader
+     * semantic surface so retrieval matches on role + difficulty signals, not just surface wording.
+     *
+     * <p>The resulting string is stored in {@code vector_store.content} as the Spring AI
+     * {@link Document} text. <strong>Important:</strong> the recovery drift-detection query
+     * in {@link QuestionIndexingStateRepository} no longer compares {@code vs.content} against
+     * {@code q.stem} directly — it relies on {@code indexed_source_hash IS DISTINCT FROM source_hash}.
+     */
+    static String buildEmbeddingText(String stem, String primarySkill, String difficulty, String tags) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Stem: ").append(stem == null ? "" : stem);
+        if (primarySkill != null && !primarySkill.isBlank())
+            sb.append("\nSkill: ").append(primarySkill);
+        if (difficulty != null && !difficulty.isBlank())
+            sb.append("\nDifficulty: ").append(difficulty);
+        if (tags != null && !tags.isBlank() && !tags.equals("[]"))
+            sb.append("\nTopics: ").append(tags);
+        return sb.toString();
     }
 
     private List<String> parseJsonArray(String value) {

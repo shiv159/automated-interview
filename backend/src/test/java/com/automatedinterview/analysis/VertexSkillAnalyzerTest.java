@@ -143,6 +143,62 @@ class VertexSkillAnalyzerTest {
         return invokeStatic("validatedClaims", new Class<?>[] {JsonNode.class, String.class}, output, document);
     }
 
+    // -------------------------------------------------------------------------
+    // chunks() — sliding window with overlap
+    // -------------------------------------------------------------------------
+
+    @Test
+    void chunksSmallDocumentProducesSingleChunk() {
+        String document = "Line 1\nLine 2\nLine 3";
+        List<String> result = VertexSkillAnalyzer.chunks(document);
+        assertEquals(1, result.size(), "A document smaller than the target size must yield a single chunk");
+        assertEquals(document, result.get(0));
+    }
+
+    @Test
+    void chunksNeverSplitsAcrossLineBoundary() {
+        // Build a document where each line is ~100 chars — will require multiple chunks.
+        String line = "x".repeat(100);
+        String document = String.join("\n", java.util.Collections.nCopies(50, line));
+        List<String> chunks = VertexSkillAnalyzer.chunks(document);
+        assertTrue(chunks.size() > 1, "A large document must be split into multiple chunks");
+        for (String chunk : chunks) {
+            // Every line in every chunk must be an exact original line (no mid-line splits)
+            for (String chunkLine : chunk.split("\n", -1)) {
+                assertTrue(document.contains(chunkLine),
+                    "Each line in a chunk must be an exact original line from the source document");
+            }
+        }
+    }
+
+    @Test
+    void chunksOverlapPreservesTrailingLinesFromPreviousChunk() {
+        // Build two chunks' worth of content. The second chunk must start with overlap
+        // lines that also appeared at the tail of the first chunk.
+        String line = "z".repeat(100); // 100 chars per line
+        // 50 lines = 5000 chars — first chunk cut at ~4000; last ~3 lines become overlap
+        String document = String.join("\n", java.util.Collections.nCopies(50, line));
+        List<String> chunks = VertexSkillAnalyzer.chunks(document);
+        assertTrue(chunks.size() >= 2, "A 5000-char document with 100-char lines must produce >=2 chunks");
+        // The second chunk must share at least one line with the first chunk (the overlap)
+        String[] firstLines  = chunks.get(0).split("\n", -1);
+        String[] secondLines = chunks.get(1).split("\n", -1);
+        String lastOfFirst  = firstLines[firstLines.length - 1];
+        String firstOfSecond = secondLines[0];
+        assertEquals(lastOfFirst, firstOfSecond,
+            "The last line(s) of chunk N must appear as the first line(s) of chunk N+1 (overlap)");
+    }
+
+    @Test
+    void chunksVeryLongSingleLineGetsItsOwnChunk() {
+        String longLine   = "y".repeat(5000);
+        String normalLine = "normal line";
+        String document   = normalLine + "\n" + longLine + "\n" + normalLine;
+        List<String> chunks = VertexSkillAnalyzer.chunks(document);
+        boolean hasLongLineAlone = chunks.stream().anyMatch(c -> c.equals(longLine));
+        assertTrue(hasLongLineAlone, "A line exceeding the target size must become its own chunk");
+    }
+
     private static JsonNode readJson(String json) {
         try {
             return MAPPER.readTree(json);

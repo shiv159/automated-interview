@@ -1,287 +1,221 @@
-# Automated Interview Platform
+# Automated Interview Platform (Intervu)
 
-An AI-assisted interview calibration platform that turns a job description and résumé into an evidence-based practice interview, then produces a structured coaching report. The application combines document analysis, semantic question retrieval, interactive interviewing, and rubric-based evaluation in one end-to-end workflow.
+An enterprise-grade, AI-assisted interview calibration platform that transforms job descriptions and candidate résumés into evidence-based practice interviews and produces structured, rubric-scored coaching reports. The application implements an end-to-end modern Retrieval-Augmented Generation (RAG) architecture combining sliding-window document analysis, asymmetric vector embeddings, hybrid retrieval with Reciprocal Rank Fusion (RRF), prompt injection guardrails, and asynchronous event-driven indexing.
 
-[Live production demo](https://automated-interview-frontend-527840416057.us-central1.run.app/)
+- **Live Frontend Application:** [https://automated-interview-frontend-948728427173.us-central1.run.app/](https://automated-interview-frontend-948728427173.us-central1.run.app/)
+- **Live Backend API:** [https://automated-interview-backend-948728427173.us-central1.run.app/](https://automated-interview-backend-948728427173.us-central1.run.app/)
 
-> Use the built-in synthetic Java/Spring sample when trying the demo. Do not upload confidential résumés or job descriptions.
+> **Note:** Use the built-in synthetic Java/Spring sample when testing the live demo. Do not upload confidential résumés or proprietary job descriptions.
 
 ![Intervu production landing page](docs/images/production-home.png)
 
-## Why this project stands out
+---
 
-- **Evidence-based matching:** extracts supported skills from a résumé and compares them with job requirements.
-- **Adaptive interview generation:** retrieves and calibrates technical and behavioral questions using skill, difficulty, and semantic relevance.
-- **Explainable evaluation:** scores answers against question-specific rubrics and gives actionable strengths and improvement guidance.
-- **Production-minded delivery:** includes Docker Compose development, contract tests, Testcontainers coverage, provider-free modes, fail-closed AI behavior, and GitHub Actions deployment to Google Cloud Run.
+## Key Capabilities
 
-## Technology stack
+- **Evidence-Based Skill Matching:** Multi-chunk sliding-window analysis extracts verified skills from candidate résumés and job descriptions using strict line-boundary preservation and quotation evidence matching.
+- **Modern RAG Hybrid Retrieval:** Fuses dense vector similarity (top-30 via pgvector) and sparse lexical search (top-10 via PostgreSQL `ts_rank`) using **Reciprocal Rank Fusion (RRF, $k=60$)**, eliminating score calibration mismatch.
+- **Asymmetric Vector Embeddings:** Task-aware embedding adapter enforces `RETRIEVAL_DOCUMENT` during indexing and `RETRIEVAL_QUERY` during search with Google Vertex AI / GenAI embeddings.
+- **Prompt Injection Defense:** XML-delimited inputs (`<candidate_answer>`, `<criteria>`, `<ideal_answer>`) and explicit jailbreak override rules ensure adversarial candidate responses cannot hijack evaluation rubrics.
+- **Explainable Rubric Scoring:** Evaluates candidate answers across multidimensional rubrics (e.g., `CORRECTNESS`, `DEPTH`, `CLARITY` for technical; STAR method `SITUATION`, `ACTION`, `RESULT`, `REFLECTION` for behavioral).
+- **Asynchronous Event-Driven Indexing:** Question ingestion, AI enrichment, and vector syncing are decoupled via Apache Kafka (`question-indexing.v1`) with automatic dead-letter topic (DLT) handling and reconciliation.
+- **Enterprise Security & Privacy:** PII masking for phone numbers and email addresses, tamper-proof session tokens via HTTP-only strict cookies, and role-based API key access for administrative question management.
+
+---
+
+## Technology Stack
 
 | Layer | Technologies |
-| --- | --- |
-| Frontend | Angular 22, TypeScript, RxJS, responsive HTML/CSS |
-| Backend | Java 21, Spring Boot 4, Spring AI, REST APIs, Bean Validation |
-| AI | Google Vertex AI / Gemini for analysis and evaluation; text embeddings for retrieval |
-| Data | PostgreSQL, pgvector, JDBC, Flyway migrations |
-| Delivery | Docker, Docker Compose, GitHub Actions, Google Cloud Run, Secret Manager |
-| Quality | Contract schemas, Node test scripts, JUnit, Testcontainers, Playwright smoke validation |
+| :--- | :--- |
+| **Frontend** | Angular 22, TypeScript, RxJS, Responsive HTML5 / CSS3 |
+| **Backend** | Java 21, Spring Boot 4, Spring AI 2.1.0, JDBC Client, Bean Validation |
+| **AI & LLM** | Google Vertex AI / Gemini 2.5 Flash, Google GenAI Text Embedding (`text-embedding-005`) |
+| **Database & Vector Store** | PostgreSQL 18 with `pgvector` (HNSW cosine distance index), Flyway Migrations |
+| **Messaging & Events** | Apache Kafka (Aiven Managed Kafka), Spring Kafka Consumers |
+| **Cloud Infrastructure** | Google Cloud Run, Secret Manager, Artifact Registry, GitHub Actions CI/CD |
+| **Resilience & Testing** | Exponential Backoff with Random Jitter, HikariCP Connection Pooling, JUnit 5, Testcontainers |
 
-## Production walkthrough
+---
 
-The deployed application was validated with synthetic demo materials: candidate review creation, skill analysis, a three-question interview, answer evaluation, and the final coaching report all completed successfully with no browser console errors.
+## Architecture Diagram
 
-![Intervu coaching report](docs/images/production-report.png)
+![Automated Interview production stack — dark theme](docs/architecture/automated-interview-dark.png)
 
-The report provides a readiness score, profile match, technical and behavioral scores, per-question feedback, and export actions for JSON/CSV or print/PDF.
+> **Interactive Diagram:** View the [interactive, self-contained HTML architecture diagram](docs/architecture/automated-interview.html).
 
-## Resume-ready project description
-
-> Built an AI-powered automated interview platform with Angular, Spring Boot, PostgreSQL/pgvector, and Vertex AI. Implemented résumé and job-description analysis, semantic question retrieval, adaptive technical and behavioral interviews, rubric-based answer evaluation, and actionable candidate reports. Added Docker Compose development, contract testing, Testcontainers coverage, provider-free fallbacks, and GitHub Actions deployment to Google Cloud Run.
-
-### Repository map
-
-- `frontend/` — Angular candidate and owner experiences.
-- `backend/` — Spring Boot REST API, document processing, interview lifecycle, AI adapters, and persistence.
-- `contracts/` — OpenAPI and JSON Schemas with contract tests.
-- `fixtures/` — synthetic resumes, job descriptions, answers, and question-import samples.
-- `.github/workflows/deploy.yml` — test, container build, Secret Manager synchronization, and Cloud Run deployment.
+---
 
 ## High-Level Application Flow
 
-The Automated Interview Platform automates the end-to-end technical interview lifecycle—from question curation and resume analysis to live interactive interviewing and AI-driven candidate evaluation.
-
 ```mermaid
 flowchart TD
-    subgraph Admin ["1. Question Bank Management"]
-        QB_Upload[Upload Questions / Documents] --> AI_Enrich[AI Question Enrichment & Tagging]
-        AI_Enrich --> Embed[Generate Vector Embeddings]
-        Embed --> PG_Vector[(PostgreSQL + pgvector)]
+    subgraph Admin ["1. Question Bank Ingestion & Enrichment"]
+        QB_Upload["Upload Questions / Drafts"] --> AI_Enrich["AI Question Enrichment & Rubric Generation"]
+        AI_Enrich --> Kafka_Pub["Publish to Kafka (question-indexing.v1)"]
+        Kafka_Pub --> Kafka_Sub["Kafka Indexing Consumer"]
+        Kafka_Sub --> Asym_Embed["Task-Aware Embedding (RETRIEVAL_DOCUMENT)"]
+        Asym_Embed --> PG_Vector[("PostgreSQL + pgvector (HNSW)")]
     end
 
-    subgraph Candidate_Flow ["2. Candidate Journey"]
-        Upload_Resume[Upload Resume / Job Description] --> Doc_Analysis[Document Analysis & Skill Extraction]
-        Doc_Analysis --> Init_Session[Initialize Interview Session]
-        PG_Vector -->|Semantic Retrieval| Match_Q[Retrieve Tailored Questions]
-        Init_Session --> Match_Q
-        Match_Q --> Live_Interview[Conduct Interactive Interview]
-        Live_Interview --> Candidate_Answers[Submit Candidate Answers]
+    subgraph Candidate_Flow ["2. Candidate Journey & Hybrid Retrieval"]
+        Upload_Docs["Upload Resume & Job Description"] --> Chunk_Analysis["Sliding-Window Skill Analysis (4k Chars)"]
+        Chunk_Analysis --> Init_Session["Initialize Session & Calibrate Difficulty"]
+        Init_Session --> Hybrid_Search["Hybrid Retrieval (Dense + Sparse RRF k=60)"]
+        PG_Vector -->|Dense Cosine Top-30| Hybrid_Search
+        Init_Session -->|Lexical ts_rank Top-10| Hybrid_Search
+        Hybrid_Search --> Atomic_Q["Select Atomic Relational Question"]
+        Atomic_Q --> Live_Interview["Interactive Turn-by-Turn Interview"]
+        Live_Interview --> Candidate_Ans["Submit Candidate Answer"]
     end
 
-    subgraph Evaluation ["3. Evaluation & Reporting"]
-        Candidate_Answers --> AI_Eval[AI Answer Evaluation & Rubric Scoring]
-        AI_Eval --> Report_Gen[Generate Assessment Report]
-        Report_Gen --> Final_Report[Candidate Report & Recommendations]
+    subgraph Evaluation ["3. Evaluation & Coaching Report"]
+        Candidate_Ans --> PII_Sanitize["PII Masking & XML Guardrail Formatting"]
+        PII_Sanitize --> AI_Eval["Rubric-Based Answer Evaluation (Gemini)"]
+        AI_Eval --> Next_Q{"More Questions?"}
+        Next_Q -- Yes --> Live_Interview
+        Next_Q -- No --> Report_Gen["Aggregate Readiness & Category Scores"]
+        Report_Gen --> Final_Report["Candidate Coaching Report & Guidance"]
     end
-```
-
-### Flow Breakdown
-
-1. **Question Bank Curation & AI Enrichment (`/question-bank`)**:
-   - **Ingestion**: Administrators upload questions or bulk documents.
-   - **Enrichment**: Vertex AI / Spring AI parses, categorizes (topics, difficulty, competencies), and generates assessment rubrics.
-   - **Vector Indexing**: Questions are embedded and stored in PostgreSQL using `pgvector` for semantic similarity search.
-
-2. **Candidate Document Analysis & Session Setup (`/` & `/sessions/:id/analysis`)**:
-   - **Resume & Job Description Parsing**: The candidate provides their resume/details.
-   - **Skill Extraction**: Document analysis identifies key competencies, experience level, and domain expertise.
-   - **Adaptive Question Retrieval**: `pgvector` retrieves the most relevant and calibrated interview questions tailored to the candidate's profile.
-
-3. **Interactive Interview Execution (`/sessions/:id/interview`)**:
-   - **Live Interview Flow**: The candidate progresses through tailored technical and behavioral questions sequentially.
-   - **Response Submission**: Candidate answers are captured and saved with session state tracking.
-
-4. **AI-Powered Evaluation & Reporting (`/sessions/:id/report`)**:
-   - **Rubric Scoring**: Responses are evaluated by AI against standardized grading criteria, scoring accuracy, depth, clarity, and relevance.
-   - **Comprehensive Report**: Generates an actionable assessment report with overall scoring, category breakdowns, strengths, areas for improvement, and hiring recommendations.
-
----
-
-## Database Schema (Simplified)
-
-The core data model manages question cataloging, candidate sessions, vector retrieval (`pgvector`), and evaluations.
-
-```mermaid
-erDiagram
-    SKILL ||--o{ QUESTION : categorizes
-    SKILL ||--o{ SESSION_SKILL : references
-    QUESTION ||..|| VECTOR_STORE : embeds
-    INTERVIEW_SESSION ||--o{ SESSION_SKILL : "extracted skills"
-    INTERVIEW_SESSION ||--o{ SESSION_QUESTION : "assigned questions"
-    QUESTION ||--o{ SESSION_QUESTION : instantiates
-    SESSION_QUESTION ||--o| EVALUATION : evaluated_by
-
-    SKILL {
-        varchar id PK
-        varchar display_name
-        jsonb aliases
-    }
-
-    QUESTION {
-        uuid id PK
-        varchar primary_skill FK
-        text stem
-        varchar type
-        varchar difficulty
-        jsonb rubric
-    }
-
-    VECTOR_STORE {
-        uuid id PK
-        vector embedding
-        json metadata
-    }
-
-    INTERVIEW_SESSION {
-        uuid id PK
-        varchar role_title
-        varchar state
-        numeric profile_match
-    }
-
-    SESSION_SKILL {
-        uuid session_id PK,FK
-        varchar skill_id PK,FK
-        boolean matched
-    }
-
-    SESSION_QUESTION {
-        uuid id PK
-        uuid session_id FK
-        uuid question_id FK
-        integer position
-        varchar status
-    }
-
-    EVALUATION {
-        uuid id PK
-        uuid session_question_id FK
-        numeric score
-        jsonb criteria_scores
-    }
 ```
 
 ---
 
-## Run locally
+## RAG Architectural Pillars Implemented
 
-1. Copy `.env.example` to `.env` and set `VERTEX_PROJECT_ID` to the dedicated Google Cloud project used by this deployment. Run `gcloud auth application-default login` once; Compose mounts the local ADC file into the backend and refreshes access tokens automatically. Never commit `.env` or Google credential files.
-2. Start PostgreSQL/pgvector and the backend:
+### 1. Ingestion & Chunking Strategy
+- **Document Normalization:** Normalizes plain-text and PDF documents, extracts clean text, and applies PII redaction (`DocumentNormalizer.maskPii`).
+- **Sliding-Window Chunking:** In `VertexSkillAnalyzer`, large documents are partitioned using 4,000-character windows with 300-character overlaps aligned to whole-line boundaries.
+- **Multi-Chunk Resilience:** Aggregates claims across all chunks and gracefully ignores single uncertain chunks when other chunks yield validated skills.
 
+### 2. Indexing & Vector Storage
+- **Asymmetric Embeddings:** Integrated via `TaskAwareEmbeddingModel` in `EmbeddingConfig.java`. Sets `RETRIEVAL_DOCUMENT` for vector ingestion and `RETRIEVAL_QUERY` for similarity search.
+- **Metadata Enrichment:** Questions are embedded with multi-aspect semantic text:
+  ```text
+  Stem: {stem}
+  Skill: {primarySkill}
+  Difficulty: {difficulty}
+  Topics: {tags}
+  ```
+- **Vector Projection:** Dedicated `vector_store` table with 768-dimensional embeddings indexed via HNSW (`vector_cosine_ops`).
+
+### 3. Hybrid Search & Ranking
+- **Reciprocal Rank Fusion (RRF):**
+  $$\text{RRF}(d) = \frac{1}{60 + \text{rank}_{\text{dense}}(d)} + \frac{1}{60 + \text{rank}_{\text{sparse}}(d)}$$
+  Combines dense semantic vector search with sparse full-text lexical ranking (`ts_rank`).
+- **Disjunctive Lexical Search:** Stems matching any query keyword are ranked using `toOrTsQuery` (`word1 | word2`) rather than restrictive boolean AND queries.
+- **Relational Fallback:** Relaxes strict difficulty levels if no questions match the specific level, ensuring atomic question retrieval without empty-result failures.
+
+### 4. Context Construction & Guardrails
+- **XML Delimitation:** Strict XML tagging (`<question>`, `<criteria>`, `<ideal_answer>`, `<candidate_answer>`) isolates candidate input.
+- **Prompt Injection Neutralization:** System prompts explicitly command the evaluator to ignore any overrides, role changes, or instructions enclosed inside candidate answers.
+- **Zero Context Contamination:** Removed unrelated question contexts from evaluation prompts, ensuring evaluations reflect solely the target question and candidate response.
+
+---
+
+## Production Walkthrough
+
+The deployed application has been end-to-end verified across complete candidate lifecycle runs: candidate review creation, skill analysis, multi-question interviews, rubric-based evaluation, and coaching report generation.
+
+![Intervu coaching report](docs/images/production-report.png)
+
+The report provides:
+- Overall Readiness Score and Profile Match Percentage
+- Category breakdowns (Technical vs. Behavioral)
+- Itemized rubric feedback for each question
+- Export options for JSON and CSV
+
+---
+
+## Repository Structure
+
+```text
+├── backend/
+│   ├── src/main/java/com/automatedinterview/
+│   │   ├── ai/              # Hybrid retrieval, vector sync, Kafka consumers, resilience
+│   │   ├── analysis/        # Skill analyzer, sliding-window chunking
+│   │   ├── api/             # HTTP filter, request logging, security
+│   │   ├── catalog/         # Skill definitions and catalog service
+│   │   ├── config/          # Spring properties, AI resilience config
+│   │   ├── document/        # PDF extraction, normalization, PII masking
+│   │   ├── interview/       # Interview engine, progression, rubric evaluation
+│   │   ├── questionbank/    # Question CRUD, import/export, diagnostics
+│   │   └── session/         # Candidate session lifecycle
+│   ├── src/main/resources/
+│   │   ├── db/migration/    # Flyway database baseline & schema migrations
+│   │   └── prompts/         # Structured StringTemplate (.st) prompt templates
+│   └── pom.xml              # Maven dependencies (Spring Boot 4, Spring AI 2.1.0)
+├── frontend/                # Angular application (components, state, styling)
+├── contracts/               # OpenAPI specifications and schema contract tests
+└── docs/                    # Architectural diagrams, screenshots, reports
+```
+
+---
+
+## Local Development
+
+### Prerequisites
+- Java 21+ and Maven 3.9+
+- Node.js 22+ and npm
+- Docker and Docker Compose
+- Google Cloud SDK (`gcloud`) with Application Default Credentials (ADC)
+
+### 1. Environment Configuration
+Copy `.env.example` to `.env`:
+```powershell
+cp .env.example .env
+```
+Set `VERTEX_PROJECT_ID` to your Google Cloud project ID. Configure local ADC:
+```powershell
+gcloud auth application-default login
+gcloud auth application-default set-quota-project <YOUR_PROJECT_ID>
+```
+
+### 2. Start Services via Docker Compose
 ```powershell
 docker compose up --build
 ```
+This boots PostgreSQL with `pgvector` on `127.0.0.1:5432` and launches the backend service.
 
-3. Start the Angular development server:
-
+### 3. Start the Angular Frontend
 ```powershell
 cd frontend
 npm ci
 npm start -- --host 127.0.0.1 --port 4200
 ```
+- Frontend: `http://127.0.0.1:4200`
+- Backend API Health: `http://127.0.0.1:4200/api/health`
 
-The database is available only on `127.0.0.1:5432`; the backend is internal to
-Compose and the frontend is available on `127.0.0.1:4200`.
+---
 
-Health check: `http://127.0.0.1:4200/api/health`
+## Verification & Testing
 
-### Google Cloud deployment secrets
-
-The Cloud Run deployment workflow synchronizes the database credentials, question-bank API key, and Aiven Kafka credentials from GitHub Secrets into Google Secret Manager, then deploys Cloud Run using Secret Manager references. Create these secrets once in the target project and grant both identities the minimum required access:
-
-```powershell
-gcloud secrets create automated-interview-database-url --replication-policy=automatic
-gcloud secrets create automated-interview-database-username --replication-policy=automatic
-gcloud secrets create automated-interview-database-password --replication-policy=automatic
-gcloud secrets create automated-interview-question-bank-api-key --replication-policy=automatic
-gcloud secrets create automated-interview-kafka-bootstrap-servers --replication-policy=automatic
-gcloud secrets create automated-interview-kafka-username --replication-policy=automatic
-gcloud secrets create automated-interview-kafka-password --replication-policy=automatic
-gcloud secrets create automated-interview-kafka-ca-certificate --replication-policy=automatic
-
-"<database-url>" | gcloud secrets versions add automated-interview-database-url --data-file=-
-"<database-username>" | gcloud secrets versions add automated-interview-database-username --data-file=-
-"<database-password>" | gcloud secrets versions add automated-interview-database-password --data-file=-
-"<question-bank-api-key>" | gcloud secrets versions add automated-interview-question-bank-api-key --data-file=-
-"<kafka-bootstrap-servers>" | gcloud secrets versions add automated-interview-kafka-bootstrap-servers --data-file=-
-"<kafka-username>" | gcloud secrets versions add automated-interview-kafka-username --data-file=-
-"<kafka-password>" | gcloud secrets versions add automated-interview-kafka-password --data-file=-
-"<kafka-ca-certificate>" | gcloud secrets versions add automated-interview-kafka-ca-certificate --data-file=-
-
-gcloud secrets add-iam-policy-binding automated-interview-database-url `
-  --member="serviceAccount:<cloud-run-runtime-service-account>" `
-  --role="roles/secretmanager.secretAccessor"
-```
-
-Repeat the final IAM command for the other seven secrets. The runtime service account—not the GitHub Actions identity—must have `roles/secretmanager.secretAccessor`. Do not put secret values in workflow YAML, GitHub command arguments, or committed `.env` files.
-
-Grant the GitHub Actions deployment service account permission to add versions. In this repository it is the same service account configured by `GCP_SERVICE_ACCOUNT`:
+Run the automated test suites:
 
 ```powershell
-gcloud secrets add-iam-policy-binding automated-interview-database-url `
-  --member="serviceAccount:<github-deployment-service-account>" `
-  --role="roles/secretmanager.secretVersionAdder"
-```
+# 1. Backend unit and integration tests (Spring AI, RRF, Prompt Guardrails)
+mvn test -f backend/pom.xml
 
-Repeat this command for the other seven secrets. Add these GitHub repository secrets: `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `QUESTION_BANK_API_KEY`, `AIVEN_KAFKA_BOOTSTRAP_SERVERS`, `AIVEN_KAFKA_USERNAME`, `AIVEN_KAFKA_PASSWORD`, and `AIVEN_KAFKA_CA_CERTIFICATE`. Each deployment creates a new Secret Manager version from those GitHub values; Cloud Run continues to read `latest`.
-
-Candidate routes are `/`, `/sessions/:id/analysis`,
-`/sessions/:id/interview`, and `/sessions/:id/report`. The owner question-bank
-route is `/question-bank`.
-
-The `.env.example` profiles are set to the Vertex target runtime. For
-provider-free development, set `APP_ANSWER_EVALUATION_PROFILE` and
-`APP_EMBEDDING_PROFILE` to `local` (question import remains AI-backed because
-its structured enrichment is provider-required). Provider failures fail closed with
-stable API problem codes and never create partial sessions or evaluations.
-
-Question limits are configured in `backend/src/main/resources/application.yml`
-and can be overridden with environment variables. Defaults are 50 questions per
-import, 10,000 questions in the bank, 50 rows per bank page, and 3 questions per
-interview (maximum 10).
-
-If `VERTEX_PROJECT_ID` is missing while an `ai` profile is enabled, backend
-startup now fails fast with a targeted validation error before Spring AI can
-emit a lower-level autoconfiguration exception.
-
-Spring AI is enabled for the migrated Google GenAI/Vertex adapters with
-`SPRING_AI_MODEL_CHAT=google-genai` and `SPRING_AI_MODEL_EMBEDDING_TEXT=google-genai` are enabled by default. Use the three `ai` profiles and
-`AI_DATA_RETENTION_ACKNOWLEDGED=true` for live validation.
-For a provider-outage drill with no ADC mounted, set
-`APP_SPRING_AI_CREDENTIALS_AVAILABLE=false`; the application will boot and
-return its stable provider-unavailable API problem instead of failing startup.
-
-For local Vertex setup:
-
-```powershell
-gcloud auth application-default login
-gcloud auth application-default set-quota-project automated-interview-20261002
-gcloud services enable aiplatform.googleapis.com --project automated-interview-20261002
-```
-
-Spring AI uses Application Default Credentials for Vertex mode, avoiding
-short-lived token configuration in `.env`.
-
-Verification commands:
-
-```powershell
+# 2. Schema and contract verification
 npm test --prefix contracts
+
+# 3. Frontend production build validation
 npm run build --prefix frontend
-mvn test -q -f backend/pom.xml
-docker compose ps
 ```
 
-The backend test suite includes a Docker-backed pgvector smoke test. Playwright
-validation covers the candidate and owner pages at desktop and 360px viewports;
-the browser scripts used for local validation are kept outside the application
-bundle and do not access provider credentials.
+---
 
-The repository is being implemented in the PRD milestone order: contracts,
-runtime foundation, document analysis, retrieval, question import, interview
-evaluation, Angular journeys, and final verification.
+## Production Deployment
 
-Production does not seed demo questions. Upload owner questions through the
-question-bank flow: the analyze step classifies each row and proposes new
-skills, then the owner approves skills individually before importing valid
-rows. Approved skills and question metadata are stored in PostgreSQL; vectors
-are rebuilt asynchronously. Set `APP_QUESTION_BANK_SEED_ENABLED=true` only for
-local demo environments; keep it `false` in production.
+The project deploys to Google Cloud Run via GitHub Actions (`.github/workflows/deploy.yml`). Each push to the active branch triggers:
+1. Complete Maven test suite execution.
+2. Synchronizing credentials from GitHub Secrets to Google Secret Manager:
+   - `automated-interview-database-url`
+   - `automated-interview-database-username`
+   - `automated-interview-database-password`
+   - `automated-interview-question-bank-api-key`
+   - `automated-interview-kafka-bootstrap-servers`
+   - `automated-interview-kafka-username`
+   - `automated-interview-kafka-password`
+   - `automated-interview-kafka-ca-certificate`
+3. Building backend and frontend container images and publishing to Google Artifact Registry.
+4. Deploying to Google Cloud Run with Secret Manager environment references.

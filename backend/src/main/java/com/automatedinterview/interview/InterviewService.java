@@ -16,7 +16,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,16 +27,15 @@ public class InterviewService {
     private final JdbcClient jdbc;
     private final VertexAnswerEvaluator vertexEvaluator;
     private final String evaluationProfile;
-    private final VectorStore vectorStore;
     private final QuestionRetrievalService retrieval;
     private final ObjectMapper json;
     private final QuestionLimitsProperties.Interview limits;
 
-    public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator, VectorStore vectorStore,
+    public InterviewService(JdbcClient jdbc, VertexAnswerEvaluator vertexEvaluator,
         QuestionRetrievalService retrieval, ObjectMapper json,
         @org.springframework.beans.factory.annotation.Value("${APP_ANSWER_EVALUATION_PROFILE:ai}") String evaluationProfile,
         QuestionLimitsProperties properties) {
-        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.vectorStore = vectorStore; this.retrieval = retrieval; this.json = json;
+        this.jdbc = jdbc; this.vertexEvaluator = vertexEvaluator; this.retrieval = retrieval; this.json = json;
         this.evaluationProfile = evaluationProfile;
         this.limits = properties.interview();
     }
@@ -72,11 +70,15 @@ public class InterviewService {
                 selected = searchTechnical(queryText, target.skillId(), session.difficulty(), used);
                 if (selected != null) break;
             }
+            if (selected == null) {
+                UUID fallbackId = findCompatibleRelational("TECHNICAL", null, null, used);
+                if (fallbackId != null) selected = loadQuestion(fallbackId);
+            }
             if (selected == null) break;
             technical.add(selected); used.add(selected.id());
         }
 
-        QuestionRow behavioral = searchBehavioral();
+        QuestionRow behavioral = searchBehavioral(used);
         if (behavioral != null) used.add(behavioral.id());
 
         List<QuestionRow> questions = new ArrayList<>(technical);
@@ -87,6 +89,10 @@ public class InterviewService {
                 TargetSkill target = targets.get((questions.size() + offset) % targets.size());
                 selected = searchTechnical(queryText(target, session.difficulty()), target.skillId(), session.difficulty(), used);
                 if (selected != null) break;
+            }
+            if (selected == null) {
+                UUID fallbackId = findCompatibleRelational("TECHNICAL", null, null, used);
+                if (fallbackId != null) selected = loadQuestion(fallbackId);
             }
             if (selected == null) break;
             questions.add(selected); used.add(selected.id());
@@ -110,21 +116,61 @@ public class InterviewService {
      * Searches the vector store for the best-matching ACTIVE TECHNICAL question for a given
      * skill + difficulty, then validates and maps the result back to the relational {@code question} table.
      * Excludes already-selected question IDs.
+     * Includes graceful fallback to any difficulty if no question matches the specific difficulty level.
      */
     private QuestionRow searchTechnical(String queryText, String skillId, String difficulty, Set<UUID> excludeIds) {
         UUID id = retrieval.select(queryText, "TECHNICAL", skillId, difficulty, List.copyOf(excludeIds));
-        return id == null ? null : loadQuestion(id, skillId, difficulty);
+        if (id == null && difficulty != null) {
+            // Fallback 1: match skill across any difficulty before giving up
+            id = retrieval.select(queryText, "TECHNICAL", skillId, null, List.copyOf(excludeIds));
+        }
+        if (id == null) {
+            // Fallback 2: relational search for skill
+            id = findCompatibleRelational("TECHNICAL", skillId, difficulty, excludeIds);
+            if (id == null && difficulty != null) {
+                id = findCompatibleRelational("TECHNICAL", skillId, null, excludeIds);
+            }
+        }
+        return id == null ? null : loadQuestion(id);
     }
 
     /** Searches the vector store for the best-matching ACTIVE BEHAVIORAL question. */
-    private QuestionRow searchBehavioral() {
-        UUID id = retrieval.select("behavioral communication teamwork problem solving reflection", "BEHAVIORAL", null, null, List.of());
-        return id == null ? null : loadQuestion(id, null, null);
+    private QuestionRow searchBehavioral(Set<UUID> excludeIds) {
+        UUID id = retrieval.select("behavioral teamwork problem solving communication", "BEHAVIORAL", null, null, List.copyOf(excludeIds));
+        if (id == null) {
+            id = findCompatibleRelational("BEHAVIORAL", null, null, excludeIds);
+        }
+        return id == null ? null : loadQuestion(id);
     }
 
-    private QuestionRow loadQuestion(UUID id, String skill, String difficulty) {
+    private UUID findCompatibleRelational(String type, String skill, String difficulty, Set<UUID> excludeIds) {
+        StringBuilder sql = new StringBuilder("""
+            SELECT id FROM question
+            WHERE status = 'ACTIVE' AND indexing_status = 'INDEXED'
+              AND type = :type
+            """);
+        if (skill != null) {
+            sql.append(" AND (primary_skill = :skill OR secondary_skills @> jsonb_build_array(CAST(:skill AS text)))");
+        }
+        if (difficulty != null) {
+            sql.append(" AND difficulty = :difficulty");
+        }
+        sql.append(" ORDER BY created_at DESC LIMIT 10");
+
+        var spec = jdbc.sql(sql.toString()).param("type", type);
+        if (skill != null) spec = spec.param("skill", skill);
+        if (difficulty != null) spec = spec.param("difficulty", difficulty);
+
+        List<UUID> rows = spec.query(UUID.class).list();
+        for (UUID candidate : rows) {
+            if (!excludeIds.contains(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    private QuestionRow loadQuestion(UUID id) {
         return jdbc.sql(QUESTION_LOOKUP_QUERY)
-            .param("id", id).param("skill", skill).param("difficulty", difficulty).query(this::question).optional().orElse(null);
+            .param("id", id).param("skill", (String) null).param("difficulty", (String) null).query(this::question).optional().orElse(null);
     }
 
     public static String questionLookupQuery() {
@@ -136,8 +182,10 @@ public class InterviewService {
     }
 
     private String queryText(TargetSkill target, String difficulty) {
-        return List.of(target.displayName(), difficulty, target.jobEvidence(), target.resumeEvidence()).stream()
-            .map(value -> DocumentNormalizer.normalize(value == null ? "" : value)).reduce((left, right) -> left + "\n" + right).orElse("");
+        if (target.displayName() != null && !target.displayName().isBlank()) {
+            return target.displayName().strip();
+        }
+        return target.skillId();
     }
 
     @Transactional
@@ -155,8 +203,7 @@ public class InterviewService {
         String model;
         if (evaluationProfile.equals("ai")) {
             try {
-                String context = retrieval.context(question.stem(), question.sourceQuestionId());
-                VertexAnswerEvaluator.Result result = vertexEvaluator.evaluate(question.stem(), question.rubric(), question.idealAnswer(), normalized, context);
+                VertexAnswerEvaluator.Result result = vertexEvaluator.evaluate(question.stem(), question.rubric(), question.idealAnswer(), normalized);
                 evaluation = new Evaluation(result.score(), result.strengths(), result.improvements(), criteriaJson(result.criteriaScores()), json(result.strengths()), json(result.improvements()));
                 adapter = "vertex";
                 model = vertexEvaluator.model();

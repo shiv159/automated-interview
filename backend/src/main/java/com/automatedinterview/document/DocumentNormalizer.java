@@ -28,8 +28,21 @@ public final class DocumentNormalizer {
     private static String repairCommonMojibake(String value) {
         return value.replace("â€“", "-").replace("â€”", "-")
             .replace("â€˜", "'").replace("â€™", "'")
-            .replace("â€œ", "\"").replace("â€", "\"")
+            .replace("â€œ", "\"").replace("â€ ", "\"")
             .replace("â€¦", "...").replace("ï¿½", "")
             .replace('\uFFFD', ' ');
+    }
+
+    /**
+     * Sanitizes sensitive PII (emails, phone numbers) from resume / candidate input
+     * prior to LLM analysis, preserving technical skills, roles, and project context.
+     */
+    public static String maskPii(String value) {
+        if (value == null || value.isBlank()) return value == null ? "" : value;
+        // Mask emails
+        String masked = value.replaceAll("(?i)[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}", "[EMAIL]");
+        // Mask phone numbers (e.g. +1-555-123-4567, (555) 123-4567, 555-123-4567)
+        masked = masked.replaceAll("(?x)(?:\\+?\\d{1,3}[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}", "[PHONE]");
+        return masked;
     }
 }

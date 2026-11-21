@@ -7,8 +7,10 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.embedding.EmbeddingRequest;
 import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.ai.embedding.EmbeddingResultMetadata;
+import org.springframework.ai.google.genai.text.GoogleGenAiTextEmbeddingOptions;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,9 +25,9 @@ import java.util.Map;
  * Configures the {@link EmbeddingModel} used by {@link org.springframework.ai.vectorstore.VectorStore}.
  *
  * <ul>
- *   <li><b>ai profile</b>: relies on the auto-configured {@code VertexAiEmbeddingModel}
- *       from {@code spring-ai-starter-model-google-genai-embedding}. No extra bean is defined
- *       here — Spring AI auto-configuration wins. This avoids bean-ambiguity issues.</li>
+ *   <li><b>ai profile</b>: wraps the auto-configured {@code EmbeddingModel}
+ *       from {@code spring-ai-starter-model-google-genai-embedding} with asymmetric task-type
+ *       support ({@code RETRIEVAL_DOCUMENT} for indexing, {@code RETRIEVAL_QUERY} for search).</li>
  *   <li><b>local profile</b>: exposes a {@code @Primary} {@link EmbeddingModel} bean that
  *       delegates to {@link LocalEmbedding#vector(String)} so that local development and
  *       tests work without any external API keys or network calls.</li>
@@ -43,8 +45,15 @@ public class EmbeddingConfig {
      * owns the schema, so PgVectorStore schema initialization stays disabled.
      */
     @Bean
-    public VectorStore vectorStore(JdbcTemplate jdbcTemplate, EmbeddingModel embeddingModel) {
-        return PgVectorStore.builder(jdbcTemplate, embeddingModel)
+    public VectorStore vectorStore(JdbcTemplate jdbcTemplate,
+                                   EmbeddingModel embeddingModel,
+                                   @Value("${APP_EMBEDDING_PROFILE:local}") String profile,
+                                   @Value("${VERTEX_EMBEDDING_DIMENSIONS:768}") int dimensions) {
+        EmbeddingModel effectiveModel = "ai".equalsIgnoreCase(profile)
+                ? new TaskAwareEmbeddingModel(embeddingModel, dimensions)
+                : embeddingModel;
+
+        return PgVectorStore.builder(jdbcTemplate, effectiveModel)
                 .dimensions(LocalEmbedding.DIMENSIONS)
                 .vectorTableName("vector_store")
                 .initializeSchema(false)
@@ -60,6 +69,64 @@ public class EmbeddingConfig {
     @ConditionalOnProperty(name = "app.embedding.profile", havingValue = "local", matchIfMissing = true)
     public EmbeddingModel localEmbeddingModel() {
         return new LocalEmbeddingModel();
+    }
+
+    /**
+     * Adapter that applies asymmetric task types for Vertex AI / Google GenAI embeddings:
+     * <ul>
+     *   <li>{@code RETRIEVAL_DOCUMENT} for indexing documents into the vector store.</li>
+     *   <li>{@code RETRIEVAL_QUERY} for query-time similarity searches.</li>
+     * </ul>
+     */
+    static class TaskAwareEmbeddingModel implements EmbeddingModel {
+        private final EmbeddingModel delegate;
+        private final int dimensions;
+
+        TaskAwareEmbeddingModel(EmbeddingModel delegate, int dimensions) {
+            this.delegate = delegate;
+            this.dimensions = dimensions;
+        }
+
+        @Override
+        public float[] embed(Document document) {
+            try {
+                var options = GoogleGenAiTextEmbeddingOptions.builder()
+                        .taskType(GoogleGenAiTextEmbeddingOptions.TaskType.RETRIEVAL_DOCUMENT)
+                        .dimensions(dimensions)
+                        .build();
+                return delegate.call(new EmbeddingRequest(List.of(document.getText()), options)).getResult().getOutput();
+            } catch (Exception e) {
+                return delegate.embed(document);
+            }
+        }
+
+        @Override
+        public float[] embed(String text) {
+            try {
+                var options = GoogleGenAiTextEmbeddingOptions.builder()
+                        .taskType(GoogleGenAiTextEmbeddingOptions.TaskType.RETRIEVAL_QUERY)
+                        .dimensions(dimensions)
+                        .build();
+                return delegate.call(new EmbeddingRequest(List.of(text), options)).getResult().getOutput();
+            } catch (Exception e) {
+                return delegate.embed(text);
+            }
+        }
+
+        @Override
+        public List<float[]> embed(List<String> texts) {
+            return delegate.embed(texts);
+        }
+
+        @Override
+        public EmbeddingResponse call(EmbeddingRequest request) {
+            return delegate.call(request);
+        }
+
+        @Override
+        public int dimensions() {
+            return delegate.dimensions();
+        }
     }
 
     /**

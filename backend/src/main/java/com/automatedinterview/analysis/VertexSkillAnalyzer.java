@@ -45,12 +45,25 @@ public class VertexSkillAnalyzer {
         Set<String> unsupported = new HashSet<>();
         Set<String> softSkills = new HashSet<>();
         Set<String> domains = new HashSet<>();
-        for (String chunk : chunks(document)) {
-            AnalysisResult result = analyzeChunkResult(documentType, chunk, false);
-            perChunkClaims.add(result.claims());
-            unsupported.addAll(result.unsupportedRequirements());
-            softSkills.addAll(result.softSkillRequirements());
-            domains.addAll(result.domainRequirements());
+        List<String> docChunks = chunks(document);
+        SkillProviderException lastUncertain = null;
+        for (String chunk : docChunks) {
+            try {
+                AnalysisResult result = analyzeChunkResult(documentType, chunk, false);
+                perChunkClaims.add(result.claims());
+                unsupported.addAll(result.unsupportedRequirements());
+                softSkills.addAll(result.softSkillRequirements());
+                domains.addAll(result.domainRequirements());
+            } catch (SkillProviderException exception) {
+                if ("provider_uncertain".equals(exception.category()) && docChunks.size() > 1) {
+                    lastUncertain = exception;
+                    continue;
+                }
+                throw exception;
+            }
+        }
+        if (perChunkClaims.stream().allMatch(List::isEmpty) && lastUncertain != null) {
+            throw lastUncertain;
         }
         List<String> technical = unsupported.stream().filter(value -> classify(value) == RequirementCategory.UNSUPPORTED_TECHNICAL).sorted().toList();
         return new AnalysisResult(aggregateClaims(perChunkClaims).stream().map(claim -> new SkillClaim(claim.skillId(), claim.importance(), clip(claim.evidence()), false)).toList(), technical, softSkills.stream().sorted().toList(), domains.stream().sorted().toList());
@@ -206,21 +219,62 @@ public class VertexSkillAnalyzer {
         return line.substring(startIndex, endIndex);
     }
 
+    /**
+     * Splits a document into overlapping chunks for skill analysis.
+     *
+     * <p>Each chunk targets ~2,000 characters. When splitting, a trailing overlap of
+     * ~200 characters (in whole lines only) is prepended to the next chunk so that
+     * skill evidence that spans a chunk boundary is not lost.
+     *
+     * <p><strong>Invariant:</strong> every line in a chunk is a complete, unmodified
+     * line from the original document. This is required by {@link #matchesWithinLine}
+     * which validates that evidence substrings appear within a single original line.
+     */
     static List<String> chunks(String document) {
+        final int TARGET_SIZE   = 4_000;
+        final int OVERLAP_CHARS = 300;
+
+        String[] lines = document.split("\\n", -1);
         List<String> result = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        for (String line : document.split("\\n", -1)) {
-            int candidate = current.isEmpty() ? line.codePointCount(0, line.length()) : current.codePointCount(0, current.length()) + 1 + line.codePointCount(0, line.length());
-            if (!current.isEmpty() && candidate > 4000) { result.add(current.toString()); current.setLength(0); }
-            if (line.codePointCount(0, line.length()) > 4000) {
-                if (!current.isEmpty()) { result.add(current.toString()); current.setLength(0); }
+        List<String> current = new ArrayList<>();
+        int currentSize = 0;
+
+        for (String line : lines) {
+            int lineLen = line.codePointCount(0, line.length());
+
+            // A single line wider than the target gets its own chunk to avoid losing it.
+            if (lineLen > TARGET_SIZE) {
+                if (!current.isEmpty()) {
+                    result.add(String.join("\n", current));
+                    current.clear();
+                    currentSize = 0;
+                }
                 result.add(line);
                 continue;
             }
-            if (!current.isEmpty()) current.append('\n');
-            current.append(line);
+
+            int addedSize = current.isEmpty() ? lineLen : currentSize + 1 + lineLen;
+            if (!current.isEmpty() && addedSize > TARGET_SIZE) {
+                result.add(String.join("\n", current));
+
+                // Build overlap: take lines from the tail of `current` up to OVERLAP_CHARS.
+                List<String> overlap = new ArrayList<>();
+                int overlapSize = 0;
+                for (int i = current.size() - 1; i >= 0; i--) {
+                    int candidateLen = current.get(i).codePointCount(0, current.get(i).length());
+                    if (overlapSize + candidateLen > OVERLAP_CHARS) break;
+                    overlap.add(0, current.get(i));
+                    overlapSize += candidateLen + 1; // +1 for newline
+                }
+                current.clear();
+                current.addAll(overlap);
+                currentSize = overlapSize;
+            }
+
+            current.add(line);
+            currentSize = current.isEmpty() ? lineLen : currentSize + 1 + lineLen;
         }
-        if (!current.isEmpty()) result.add(current.toString());
+        if (!current.isEmpty()) result.add(String.join("\n", current));
         return result;
     }
 
