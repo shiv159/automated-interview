@@ -126,6 +126,20 @@
   .bank-stats div { flex: 1 1 140px; }
   .suggestion-row { grid-template-columns: auto minmax(0, 1fr); }
   .suggestion-row input[aria-label="Skill aliases"] { grid-column: 2; }
+  .table-row .coverage-tag::before,
+  .table-row .tag::before,
+  .table-row .indexing-tag::before {
+    display: block;
+    margin-bottom: 3px;
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: var(--font-weight-regular);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .table-row .coverage-tag::before { content: "Coverage & level"; }
+  .table-row .tag::before { content: "Status"; }
+  .table-row .indexing-tag::before { content: "Indexing"; }
 }
 
 @media (max-width: 480px) {

@@ -37,7 +37,7 @@
     <div class="section-head bank-heading">
       <div>
         <p class="eyebrow">Repository <span>Technical &amp; behavioral catalog</span></p>
-        <h1>Keep the signal sharp.</h1>
+        <h1>Interview question bank</h1>
         <p class="lede">Explore, search, and import interview questions calibrated with evaluation rubrics.</p>
       </div>
       <div class="actions">
@@ -117,7 +117,7 @@
       </div>
 
       <section class="panel question-table" aria-label="Question bank rows" [attr.aria-busy]="loading()">
-        <div class="table-head"><span>Question stem</span><span>Coverage &amp; level</span><span>Origin</span><span>Indexing</span><span>Actions</span></div>
+        <div class="table-head"><span>Question stem</span><span>Coverage &amp; level</span><span>Status</span><span>Indexing</span><span>Actions</span></div>
         @for (question of filteredQuestions; track question.id) {
           <article class="table-row">
             <div class="question-copy">
