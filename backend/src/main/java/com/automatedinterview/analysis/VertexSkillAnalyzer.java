@@ -45,12 +45,25 @@ public class VertexSkillAnalyzer {
         Set<String> unsupported = new HashSet<>();
         Set<String> softSkills = new HashSet<>();
         Set<String> domains = new HashSet<>();
-        for (String chunk : chunks(document)) {
-            AnalysisResult result = analyzeChunkResult(documentType, chunk, false);
-            perChunkClaims.add(result.claims());
-            unsupported.addAll(result.unsupportedRequirements());
-            softSkills.addAll(result.softSkillRequirements());
-            domains.addAll(result.domainRequirements());
+        List<String> docChunks = chunks(document);
+        SkillProviderException lastUncertain = null;
+        for (String chunk : docChunks) {
+            try {
+                AnalysisResult result = analyzeChunkResult(documentType, chunk, false);
+                perChunkClaims.add(result.claims());
+                unsupported.addAll(result.unsupportedRequirements());
+                softSkills.addAll(result.softSkillRequirements());
+                domains.addAll(result.domainRequirements());
+            } catch (SkillProviderException exception) {
+                if ("provider_uncertain".equals(exception.category()) && docChunks.size() > 1) {
+                    lastUncertain = exception;
+                    continue;
+                }
+                throw exception;
+            }
+        }
+        if (perChunkClaims.stream().allMatch(List::isEmpty) && lastUncertain != null) {
+            throw lastUncertain;
         }
         List<String> technical = unsupported.stream().filter(value -> classify(value) == RequirementCategory.UNSUPPORTED_TECHNICAL).sorted().toList();
         return new AnalysisResult(aggregateClaims(perChunkClaims).stream().map(claim -> new SkillClaim(claim.skillId(), claim.importance(), clip(claim.evidence()), false)).toList(), technical, softSkills.stream().sorted().toList(), domains.stream().sorted().toList());
@@ -218,8 +231,8 @@ public class VertexSkillAnalyzer {
      * which validates that evidence substrings appear within a single original line.
      */
     static List<String> chunks(String document) {
-        final int TARGET_SIZE   = 2_000;
-        final int OVERLAP_CHARS = 200;
+        final int TARGET_SIZE   = 4_000;
+        final int OVERLAP_CHARS = 300;
 
         String[] lines = document.split("\\n", -1);
         List<String> result = new ArrayList<>();

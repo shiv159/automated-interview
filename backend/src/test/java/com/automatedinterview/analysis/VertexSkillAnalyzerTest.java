@@ -176,10 +176,10 @@ class VertexSkillAnalyzerTest {
         // Build two chunks' worth of content. The second chunk must start with overlap
         // lines that also appeared at the tail of the first chunk.
         String line = "z".repeat(100); // 100 chars per line
-        // 25 lines = 2500 chars — first chunk cut at ~2000; last ~5 lines become overlap
-        String document = String.join("\n", java.util.Collections.nCopies(25, line));
+        // 50 lines = 5000 chars — first chunk cut at ~4000; last ~3 lines become overlap
+        String document = String.join("\n", java.util.Collections.nCopies(50, line));
         List<String> chunks = VertexSkillAnalyzer.chunks(document);
-        assertTrue(chunks.size() >= 2, "A 2500-char document with 100-char lines must produce >=2 chunks");
+        assertTrue(chunks.size() >= 2, "A 5000-char document with 100-char lines must produce >=2 chunks");
         // The second chunk must share at least one line with the first chunk (the overlap)
         String[] firstLines  = chunks.get(0).split("\n", -1);
         String[] secondLines = chunks.get(1).split("\n", -1);
@@ -191,7 +191,7 @@ class VertexSkillAnalyzerTest {
 
     @Test
     void chunksVeryLongSingleLineGetsItsOwnChunk() {
-        String longLine   = "y".repeat(3000);
+        String longLine   = "y".repeat(5000);
         String normalLine = "normal line";
         String document   = normalLine + "\n" + longLine + "\n" + normalLine;
         List<String> chunks = VertexSkillAnalyzer.chunks(document);
