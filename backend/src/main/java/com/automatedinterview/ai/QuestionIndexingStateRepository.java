@@ -80,7 +80,6 @@ public class QuestionIndexingStateRepository {
                          (q.indexing_status IN ('PENDING', 'PROCESSING') AND COALESCE(q.indexing_next_attempt_at, now()) <= now())
                          OR q.indexed_source_hash IS DISTINCT FROM q.source_hash
                          OR vs.id IS NULL
-                         OR vs.content IS DISTINCT FROM q.stem
                          OR vs.metadata->>'type' IS DISTINCT FROM q.type
                          OR vs.metadata->>'primary_skill' IS DISTINCT FROM COALESCE(q.primary_skill, '')
                          OR vs.metadata->>'secondary_skills' IS DISTINCT FROM q.secondary_skills::text

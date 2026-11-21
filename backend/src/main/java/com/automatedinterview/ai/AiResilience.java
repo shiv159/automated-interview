@@ -14,7 +14,10 @@ public class AiResilience {
             catch (RuntimeException exception) {
                 last = exception;
                 if (!retryable(exception) || attempt == properties.maxAttempts()) throw exception;
-                try { Thread.sleep(properties.retryBackoffMs()); }
+                try {
+                    long delay = (long)(properties.retryBackoffMs() * Math.pow(2, attempt - 1) + (Math.random() * 200));
+                    Thread.sleep(Math.min(delay, 10_000L));
+                }
                 catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); throw exception; }
             }
         }

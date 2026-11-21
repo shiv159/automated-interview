@@ -20,8 +20,8 @@ app:
     profile: ${APP_EMBEDDING_PROFILE:local}
   ai:
     enabled: ${APP_SPRING_AI_ENABLED:true}
-    max-attempts: ${APP_AI_MAX_ATTEMPTS:2}
-    retry-backoff-ms: ${APP_AI_RETRY_BACKOFF_MS:100}
+    max-attempts: ${APP_AI_MAX_ATTEMPTS:3}
+    retry-backoff-ms: ${APP_AI_RETRY_BACKOFF_MS:300}
     embedding-dimensions: ${VERTEX_EMBEDDING_DIMENSIONS:768}
     embedding-batch-size: ${APP_AI_EMBEDDING_BATCH_SIZE:32}
 server:
@@ -63,8 +63,8 @@ spring:
       validation-timeout: ${SPRING_DATASOURCE_VALIDATION_TIMEOUT_MS:5000}
       max-lifetime: ${SPRING_DATASOURCE_MAX_LIFETIME_MS:1800000}
       keepalive-time: ${SPRING_DATASOURCE_KEEPALIVE_TIME_MS:30000}
-      minimum-idle: ${SPRING_DATASOURCE_MINIMUM_IDLE:1}
-      maximum-pool-size: ${SPRING_DATASOURCE_MAXIMUM_POOL_SIZE:5}
+      minimum-idle: ${SPRING_DATASOURCE_MINIMUM_IDLE:2}
+      maximum-pool-size: ${SPRING_DATASOURCE_MAXIMUM_POOL_SIZE:10}
   servlet:
     multipart:
       max-file-size: 2MB
